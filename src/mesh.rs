@@ -24,6 +24,21 @@ pub struct Mesh {
     pub triangles: Triangles,
 }
 
+impl Mesh {
+    pub fn merge(&mut self, other: &Mesh) -> usize {
+        let offset = self.vertices.vertex.len();
+        self.vertices.vertex.extend(other.vertices.vertex.iter().cloned());
+        self.triangles.triangle.extend(other.triangles.triangle.iter().map(|t| Triangle {
+            v1: t.v1 + offset,
+            v2: t.v2 + offset,
+            v3: t.v3 + offset,
+            mmu_ps: t.mmu_ps.clone(),
+            mmu_orca: t.mmu_orca.clone(),
+        }));
+        offset
+    }
+}
+
 /// A list of vertices, as a struct mainly to comply with easier serde xml
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Vertices {

@@ -13,11 +13,15 @@ use quick_xml::{
 use serde::{Deserialize, Serialize};
 use zip::{write::FileOptions, ZipArchive, ZipWriter};
 
-use crate::mesh::*;
+use crate::metadata::orca_metadata as orca;
+use crate::metadata::orca_metadata::OrcaMetadata;
+use crate::metadata::ps_metadata as ps;
+use crate::metadata::ps_metadata::PSMetadata;
 use crate::model::*;
+use crate::{mesh::*, metadata};
 
 // #[cfg(feature = "nope")]
-pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], path: P) -> Result<()> {
+pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], metadata: Option<&PSMetadata>, path: P) -> Result<()> {
     let mut writer = std::fs::File::create(path)?;
     let mut archive = ZipWriter::new(writer);
 
@@ -45,6 +49,21 @@ pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], path: P) -> Resu
     xml_writer.write_indent()?;
     xml_writer.into_inner().write_all(xml.as_bytes())?;
 
+    if let Some(md) = metadata {
+        archive.start_file("Metadata/Slic3r_PE_model.config", FileOptions::default())?;
+
+        let mut xml = String::new();
+
+        let mut ser = Serializer::with_root(&mut xml, Some("config"))?;
+        ser.indent(' ', 2);
+        md.serialize(ser)?;
+
+        let mut xml_writer = Writer::new_with_indent(&mut archive, b' ', 2);
+        xml_writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))?;
+        xml_writer.write_indent()?;
+        xml_writer.into_inner().write_all(xml.as_bytes())?;
+    }
+
     archive.finish()?;
 
     Ok(())
@@ -52,13 +71,14 @@ pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], path: P) -> Resu
 
 /// In Prusa, each object is stored as a resource in a single model file with a mesh
 ///
-/// In Orca, each object has a component, with the attribute `p:path`
-/// that points to a separate model file
-pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Model>> {
+/// In Orca, each object has one or more components, with the attribute `p:path`
+/// that points to a separate model file, and an `objectid` specifying which object.
+pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, PSMetadata)> {
     let mut reader = std::fs::File::open(path)?;
 
     let mut zip = ZipArchive::new(reader)?;
     let mut models = vec![];
+    let mut md_orca = None;
 
     let re = Regex::new(r"p:path")?;
 
@@ -77,21 +97,56 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Model>> {
             // let mut de = Deserializer::from_reader(BufReader::new(file));
             let model = Model::deserialize(&mut de)?;
             models.push(model);
+        } else if file.name().ends_with("model_settings.config") {
+            // debug!("got metadata file");
+            let mut de = Deserializer::from_reader(BufReader::new(file));
+
+            let m = OrcaMetadata::deserialize(&mut de)?;
+            // debug!("metadata: {:#?}", m);
+
+            md_orca = Some(m);
         }
     }
 
+    let md_orca = md_orca.unwrap();
+
     let mut out = vec![];
+    // let mut md2 = None;
+    let mut md_ps = PSMetadata { object: vec![] };
 
     for (m, model) in models.iter().enumerate() {
         let mut model2 = model.clone();
 
         model2.resources.object = vec![];
 
+        // let md = md_orca.object.find(|o| o)
+        // let mut md2 = ps::Object {
+        // }
+
         debug!("model[{}]", m);
-        for (i, object) in model.resources.object.iter().enumerate() {
-            debug!("object[{}]", i);
+        for object in model.resources.object.iter() {
+            debug!("object[{}]", object.id);
+
+            /// get the orca metadata for this object
+            let md_object = md_orca.object.iter().find(|o| o.id == object.id).unwrap();
 
             let mut object2 = object.clone();
+
+            let mut ps_md = ps::Object {
+                id: object.id,
+                /// orca doesn't have instances
+                instances_count: 1,
+                metadata: vec![],
+                volume: vec![],
+            };
+
+            for md in md_object.metadata.iter() {
+                ps_md.metadata.push(ps::Metadata {
+                    ty: "object".to_string(),
+                    key: md.key.clone(),
+                    value: md.value.clone(),
+                });
+            }
 
             match &object.object {
                 ObjectData::Mesh(mesh) => {
@@ -99,7 +154,6 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Model>> {
                     debug!("mesh.triangles.triangle.len() = {:?}", mesh.triangles.triangle.len());
                 }
                 ObjectData::Components { component } => {
-                    // debug!("component.len() = {:?}", component.len());
                     for c in component.iter() {
                         // debug!("objectid = {:?}", c.objectid);
                         // debug!("transform = {:?}", c.transform);
@@ -117,12 +171,87 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Model>> {
                         f.read_to_string(&mut s)?;
 
                         let mut de = Deserializer::from_str(&s);
-                        let model = Model::deserialize(&mut de)?;
+                        let sub_model = Model::deserialize(&mut de)?;
+
+                        let mut mesh = Mesh {
+                            vertices: Vertices { vertex: vec![] },
+                            triangles: Triangles { triangle: vec![] },
+                        };
+
+                        let mut prev_id = 0;
+
+                        /// for each mesh, smoosh models together and record the offsets
+                        for sub_model_object in sub_model.resources.object.iter() {
+                            let id = sub_model_object.id;
+
+                            let md_part = md_object.part.iter().find(|p| p.id == id).unwrap();
+
+                            // model2.resources.object.push(object.clone());
+                            match &sub_model_object.object {
+                                ObjectData::Mesh(m) => {
+                                    let offset = mesh.merge(&m);
+
+                                    let mut md_volume = ps::Volume {
+                                        firstid: prev_id + 1,
+                                        lastid: offset,
+                                        metadata: vec![],
+                                        mesh: ps::Mesh {
+                                            edges_fixed: md_part.mesh_stat.edges_fixed,
+                                            degenerate_facets: md_part.mesh_stat.degenerate_facets,
+                                            facets_removed: md_part.mesh_stat.facets_removed,
+                                            facets_reversed: md_part.mesh_stat.facets_reversed,
+                                            backwards_edges: md_part.mesh_stat.backwards_edges,
+                                        },
+                                    };
+
+                                    if let Some(name) = md_part
+                                        .metadata
+                                        .iter()
+                                        .find(|m| m.key.as_deref() == Some("name"))
+                                        .unwrap()
+                                        .value
+                                        .clone()
+                                    {
+                                        md_volume.metadata.push(ps::Metadata {
+                                            ty: "Volume".to_string(),
+                                            key: Some("name".to_string()),
+                                            value: Some(name),
+                                        });
+                                    }
+
+                                    if let Some(matrix) = md_part
+                                        .metadata
+                                        .iter()
+                                        .find(|m| m.key.as_deref() == Some("matrix"))
+                                        .unwrap()
+                                        .value
+                                        .clone()
+                                    {
+                                        md_volume.metadata.push(ps::Metadata {
+                                            ty: "Volume".to_string(),
+                                            key: Some("name".to_string()),
+                                            value: Some(matrix),
+                                        });
+                                    }
+
+                                    ps_md.volume.push(md_volume);
+
+                                    prev_id = offset;
+                                }
+                                ObjectData::Components { component } => {
+                                    panic!("nested components instead of mesh?");
+                                }
+                            }
+                        }
+
+                        // md_ps.object.push();
+                        object2.object = ObjectData::Mesh(mesh);
 
                         /// Prusaslicer just smooshes together the meshes and stores the result
                         /// in the first object, with other stuff stored in metadata.
                         ///
                         /// That's a pain, so we'll just pretend the object can only have one component.
+                        #[cfg(feature = "nope")]
                         match model.resources.object[0].object.clone() {
                             ObjectData::Mesh(mut mesh) => {
                                 for t in mesh.triangles.triangle.iter_mut() {
@@ -142,20 +271,22 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Model>> {
             }
 
             model2.resources.object.push(object2);
+            // md_ps.object.push(md2);
         }
 
         out.push(model2);
     }
 
     // Ok(models)
-    Ok(out)
+    Ok((out, md_ps))
 }
 
-pub fn load_3mf_ps<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Model>> {
+pub fn load_3mf_ps<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, Option<PSMetadata>)> {
     let mut reader = std::fs::File::open(path)?;
 
     let mut zip = ZipArchive::new(reader)?;
     let mut models = vec![];
+    let mut md = None;
 
     let re = Regex::new(r"slic3rpe:mmu_segmentation")?;
 
@@ -172,10 +303,50 @@ pub fn load_3mf_ps<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Model>> {
             let mut de = Deserializer::from_str(&s2);
             let model = Model::deserialize(&mut de)?;
             models.push(model);
+        } else if file.name().ends_with("Slic3r_PE_model.config") {
+            debug!("got metadata file");
+            let mut de = Deserializer::from_reader(BufReader::new(file));
+
+            let m = PSMetadata::deserialize(&mut de)?;
+            debug!("metadata: {:?}", m);
+
+            md = Some(m);
         }
     }
 
-    Ok(models)
+    Ok((models, md))
+}
+
+/// won't work, has to be done at the same time as model conversion
+#[cfg(feature = "nope")]
+pub fn convert_metadata(md: &OrcaMetadata) -> Result<PSMetadata> {
+    let mut out = PSMetadata { object: vec![] };
+
+    for object in md.object.iter() {
+        let mut object2 = ps::Object {
+            id: object.id,
+            instances_count: 1,
+            metadata: vec![],
+            volume: vec![],
+        };
+
+        for md in object.metadata.iter() {
+            object2.metadata.push(ps::Metadata {
+                ty: "".to_string(),
+                key: md.key.clone(),
+                value: md.value.clone(),
+            });
+        }
+
+        for part in object.part.iter() {
+            /// firstid and lastid refer to the triangle indices in the mesh
+            object2.volume.push(ps::Volume {});
+        }
+
+        out.object.push(object2);
+    }
+
+    Ok(out)
 }
 
 pub fn debug_models(models: &[Model]) {
