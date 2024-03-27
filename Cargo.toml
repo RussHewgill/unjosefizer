@@ -15,4 +15,15 @@ path = "src/main.rs"
 [dependencies]
 serde = { version = "1.0.195", features = ["derive"] }
 zip = "0.6.6"
-quick-xml = "0.31.0"
+quick-xml = { version = "0.31.0", features = ["serialize"] }
+anyhow = "1.0.81"
+tracing = "0.1.40"
+tracing-appender = "0.2.3"
+tracing-log = "0.2.0"
+tracing-subscriber = { version = "0.3.18", features = [
+  "local-time",
+  "env-filter",
+  "json",
+  "registry",
+] }
+regex = "1.10.4"

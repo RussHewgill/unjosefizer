@@ -8,5 +8,5 @@
 use unjosefizer_lib::*;
 
 fn main() {
-    test_main();
+    test_main().unwrap();
 }

@@ -63,9 +63,11 @@ pub struct Triangle {
     pub v3: usize,
 
     /// prusaslicer paint
-    #[serde(rename = "slic3rpe:mmu_segmentation")]
+    // #[serde(rename = "@slic3rpe:mmu_segmentation")]
+    // #[serde(rename = "{slic3rpe}mmu_segmentation")]
+    #[serde(rename = "@mmu_segmentation")]
     pub mmu_ps: Option<String>,
 
-    #[serde(rename = "paint_color")]
+    #[serde(rename = "@paint_color")]
     pub mmu_orca: Option<String>,
 }
