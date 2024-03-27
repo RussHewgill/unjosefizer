@@ -65,9 +65,9 @@ pub struct Triangle {
     /// prusaslicer paint
     // #[serde(rename = "@slic3rpe:mmu_segmentation")]
     // #[serde(rename = "{slic3rpe}mmu_segmentation")]
-    #[serde(rename = "@mmu_segmentation")]
+    #[serde(rename = "@mmu_segmentation", skip_serializing_if = "Option::is_none")]
     pub mmu_ps: Option<String>,
 
-    #[serde(rename = "@paint_color")]
+    #[serde(rename = "@paint_color", skip_serializing_if = "Option::is_none")]
     pub mmu_orca: Option<String>,
 }

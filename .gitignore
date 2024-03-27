@@ -7,3 +7,4 @@ assets/*
 .rustfmt.toml
 *.webp
 *.gcode
+debug_output*

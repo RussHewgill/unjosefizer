@@ -71,7 +71,10 @@ pub struct Component {
     pub objectid: usize,
     #[serde(rename = "@transform", skip_serializing_if = "Option::is_none")]
     pub transform: Option<[f64; 12]>,
+    #[serde(rename = "@path", skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Build {
     #[serde(default)]
@@ -106,6 +109,7 @@ impl Default for Unit {
     }
 }
 
+#[cfg(feature = "nope")]
 impl From<Mesh> for Model {
     fn from(mesh: Mesh) -> Self {
         let object = Object {

@@ -5,8 +5,11 @@
 #![allow(unused_doc_comments)]
 #![allow(unused_labels)]
 
-use unjosefizer_lib::*;
+use unjosefizer_lib::{logging::init_logs, *};
 
 fn main() {
-    test_main().unwrap();
+    init_logs();
+
+    // test_main().unwrap();
+    ui::run_eframe().unwrap();
 }

@@ -27,3 +27,7 @@ tracing-subscriber = { version = "0.3.18", features = [
   "registry",
 ] }
 regex = "1.10.4"
+eframe = { version = "0.27", features = ["persistence"] }
+egui = "0.27"
+egui_file = "0.17.0"
+rfd = "0.14.1"
