@@ -1,0 +1,18 @@
+[package]
+name = "unjosefizer"
+version = "0.1.0"
+edition = "2021"
+
+
+[lib]
+name = "unjosefizer_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "unjosefizer"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0.195", features = ["derive"] }
+zip = "0.6.6"
+quick-xml = "0.31.0"

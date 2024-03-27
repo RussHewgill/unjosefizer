@@ -1,0 +1,9 @@
+/target
+*.3mf
+*.csv
+*.log
+assets/*
+.vscode
+.rustfmt.toml
+*.webp
+*.gcode
