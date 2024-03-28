@@ -33,7 +33,7 @@ pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], metadata: Option
     archive.start_file("_rels/.rels", FileOptions::default())?;
     archive.write_all(include_bytes!("../templates/rels.xml"))?;
 
-    warn!("using first model only");
+    // warn!("using first model only");
     let model = models[0].clone();
 
     archive.start_file("3D/3dmodel.model", FileOptions::default())?;
