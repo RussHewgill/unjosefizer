@@ -3402,7 +3402,6 @@ name = "unjosefizer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "crossbeam-channel",
  "eframe",
  "egui",
  "egui_file",
