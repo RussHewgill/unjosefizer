@@ -28,10 +28,10 @@ pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], metadata: Option
     let mut archive = ZipWriter::new(writer);
 
     archive.start_file("[Content_Types].xml", FileOptions::default())?;
-    archive.write_all(include_bytes!("../assets/content_types.xml"))?;
+    archive.write_all(include_bytes!("../templates/content_types.xml"))?;
 
     archive.start_file("_rels/.rels", FileOptions::default())?;
-    archive.write_all(include_bytes!("../assets/rels.xml"))?;
+    archive.write_all(include_bytes!("../templates/rels.xml"))?;
 
     warn!("using first model only");
     let model = models[0].clone();
