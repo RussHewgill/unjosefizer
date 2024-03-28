@@ -62,7 +62,9 @@ pub fn test_main() -> Result<()> {
     // }
 
     info!("orca test");
-    let path_orca = "assets/test-orca.3mf";
+    // let path_orca = "assets/test-orca.3mf";
+    // let path_orca = "assets/test-orca2.3mf";
+    let path_orca = "assets/test-gemstone-orca.3mf";
     let (models_orca, md) = load_3mf_orca(path_orca).unwrap();
     // debug_models(&models_orca);
     // save_ps_3mf(&models_orca, md.as_ref(), "assets/test-ps-out.3mf").unwrap();

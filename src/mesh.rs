@@ -37,6 +37,47 @@ impl Mesh {
         }));
         offset
     }
+
+    pub fn to_ps(&mut self) {
+        for t in self.triangles.triangle.iter_mut() {
+            if let Some(mmu) = t.mmu_orca.take() {
+                t.mmu_ps = Some(mmu);
+            }
+        }
+    }
+
+    pub fn apply_transform(&mut self, transform: &[f64]) {
+        // assert_eq!(transform.len(), 12, "Transform must be 12 elements");
+        assert_eq!(transform.len(), 16, "Transform must be 16 elements");
+        use nalgebra::{Matrix3x4, Matrix4, Transform};
+
+        let m = Matrix4::from_row_slice(&transform);
+
+        /// from model_settings.config, part translation
+        /// 1 0 0 X
+        /// 0 1 0 Y
+        /// 0 0 1 Z
+        /// 0 0 0 1
+        ///
+        /// scale:
+        /// X 0 0 0
+        /// 0 Y 0 0
+        /// 0 0 Z 0
+        /// 0 0 0 1
+        for v in self.vertices.vertex.iter_mut() {
+            let v2 = nalgebra::Point3::new(v.x, v.y, v.z);
+            let v2 = v2.coords.push(1.0);
+
+            let v2 = m * v2;
+
+            v.x = v2.x;
+            v.y = v2.y;
+            v.z = v2.z;
+        }
+
+        // m.trans
+        //
+    }
 }
 
 /// A list of vertices, as a struct mainly to comply with easier serde xml

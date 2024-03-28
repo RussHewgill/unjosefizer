@@ -14,6 +14,8 @@ pub mod ps_metadata {
         pub id: usize,
         #[serde(rename = "@instances_count")]
         pub instances_count: usize,
+        // #[serde(rename = "@type", skip_serializing_if = "Option::is_none")]
+        // pub ty: Option<String>,
         // #[serde(rename = "@metadata")]
         pub metadata: Vec<Metadata>,
         pub volume: Vec<Volume>,

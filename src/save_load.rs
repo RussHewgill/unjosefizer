@@ -119,6 +119,11 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
 
         model2.resources.object = vec![];
 
+        model2.metadata.push(Metadata {
+            name: "slic3rpe:Version3mf".to_string(),
+            value: Some("1".to_string()),
+        });
+
         // let md = md_orca.object.find(|o| o)
         // let mut md2 = ps::Object {
         // }
@@ -131,21 +136,25 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
             let md_object = md_orca.object.iter().find(|o| o.id == object.id).unwrap();
 
             let mut object2 = object.clone();
+            object2.ty = Some("model".to_string());
 
             let mut ps_md = ps::Object {
                 id: object.id,
                 /// orca doesn't have instances
                 instances_count: 1,
+                // ty: "model".to_string(),
                 metadata: vec![],
                 volume: vec![],
             };
 
             for md in md_object.metadata.iter() {
-                ps_md.metadata.push(ps::Metadata {
-                    ty: "object".to_string(),
-                    key: md.key.clone(),
-                    value: md.value.clone(),
-                });
+                if md.key.as_deref() == Some("name") {
+                    ps_md.metadata.push(ps::Metadata {
+                        ty: "object".to_string(),
+                        key: md.key.clone(),
+                        value: md.value.clone(),
+                    });
+                }
             }
 
             match &object.object {
@@ -154,7 +163,15 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
                     debug!("mesh.triangles.triangle.len() = {:?}", mesh.triangles.triangle.len());
                 }
                 ObjectData::Components { component } => {
+                    let mut mesh = Mesh {
+                        vertices: Vertices { vertex: vec![] },
+                        triangles: Triangles { triangle: vec![] },
+                    };
+
+                    let mut prev_id = 0;
+
                     for c in component.iter() {
+                        debug!("component[{}]", c.objectid);
                         // debug!("objectid = {:?}", c.objectid);
                         // debug!("transform = {:?}", c.transform);
                         // debug!("c.path = {:?}", c.path);
@@ -165,6 +182,8 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
                         let path = &path[1..];
                         // debug!("path = {:?}", path);
 
+                        let sub_id = c.objectid;
+
                         /// load the component model from the path
                         let mut f = zip.by_name(&path)?;
                         let mut s = String::new();
@@ -173,27 +192,45 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
                         let mut de = Deserializer::from_str(&s);
                         let sub_model = Model::deserialize(&mut de)?;
 
-                        let mut mesh = Mesh {
-                            vertices: Vertices { vertex: vec![] },
-                            triangles: Triangles { triangle: vec![] },
-                        };
-
-                        let mut prev_id = 0;
+                        // // /// get the transform matrix from the component
+                        // let transform = c.transform;
 
                         /// for each mesh, smoosh models together and record the offsets
+                        ///
+                        /// TODO: prusaslicer expects the verts to already be transformed to local space?
                         for sub_model_object in sub_model.resources.object.iter() {
                             let id = sub_model_object.id;
+                            if id != sub_id {
+                                continue;
+                            }
 
                             let md_part = md_object.part.iter().find(|p| p.id == id).unwrap();
 
-                            // model2.resources.object.push(object.clone());
                             match &sub_model_object.object {
                                 ObjectData::Mesh(m) => {
+                                    let mut m = m.clone();
+
+                                    let transform = md_part
+                                        .metadata
+                                        .iter()
+                                        .find(|m| m.key.as_deref() == Some("matrix"))
+                                        .unwrap()
+                                        .value
+                                        .clone()
+                                        .unwrap();
+
+                                    let transform = transform
+                                        .split_whitespace()
+                                        .map(|s| s.parse::<f64>().unwrap())
+                                        .collect::<Vec<f64>>();
+
+                                    m.apply_transform(&transform);
+
                                     let offset = mesh.merge(&m);
 
                                     let mut md_volume = ps::Volume {
-                                        firstid: prev_id + 1,
-                                        lastid: offset,
+                                        firstid: prev_id,
+                                        lastid: mesh.triangles.triangle.len() - 1,
                                         metadata: vec![],
                                         mesh: ps::Mesh {
                                             edges_fixed: md_part.mesh_stat.edges_fixed,
@@ -213,7 +250,7 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
                                         .clone()
                                     {
                                         md_volume.metadata.push(ps::Metadata {
-                                            ty: "Volume".to_string(),
+                                            ty: "volume".to_string(),
                                             key: Some("name".to_string()),
                                             value: Some(name),
                                         });
@@ -228,50 +265,32 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
                                         .clone()
                                     {
                                         md_volume.metadata.push(ps::Metadata {
-                                            ty: "Volume".to_string(),
-                                            key: Some("name".to_string()),
+                                            ty: "volume".to_string(),
+                                            key: Some("matrix".to_string()),
                                             value: Some(matrix),
                                         });
                                     }
 
                                     ps_md.volume.push(md_volume);
 
-                                    prev_id = offset;
+                                    prev_id = mesh.triangles.triangle.len();
+                                    debug!("setting prev_id to {}", prev_id);
                                 }
                                 ObjectData::Components { component } => {
                                     panic!("nested components instead of mesh?");
                                 }
                             }
                         }
-
-                        // md_ps.object.push();
-                        object2.object = ObjectData::Mesh(mesh);
-
-                        /// Prusaslicer just smooshes together the meshes and stores the result
-                        /// in the first object, with other stuff stored in metadata.
-                        ///
-                        /// That's a pain, so we'll just pretend the object can only have one component.
-                        #[cfg(feature = "nope")]
-                        match model.resources.object[0].object.clone() {
-                            ObjectData::Mesh(mut mesh) => {
-                                for t in mesh.triangles.triangle.iter_mut() {
-                                    if let Some(mmu) = t.mmu_orca.take() {
-                                        t.mmu_ps = Some(mmu);
-                                    }
-                                }
-
-                                object2.object = ObjectData::Mesh(mesh);
-                            }
-                            ObjectData::Components { component } => {
-                                panic!("nested components instead of mesh?");
-                            }
-                        }
                     }
+
+                    mesh.to_ps();
+                    object2.object = ObjectData::Mesh(mesh);
                 }
             }
 
             model2.resources.object.push(object2);
-            // md_ps.object.push(md2);
+            // I am so good at naming variables
+            md_ps.object.push(ps_md);
         }
 
         out.push(model2);

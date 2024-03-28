@@ -54,6 +54,8 @@ pub struct Object {
     pub name: Option<String>,
     #[serde(rename = "@pid", skip_serializing_if = "Option::is_none")]
     pub pid: Option<usize>,
+    #[serde(rename = "@type", skip_serializing_if = "Option::is_none")]
+    pub ty: Option<String>,
     #[serde(rename = "$value")]
     pub object: ObjectData,
 }
