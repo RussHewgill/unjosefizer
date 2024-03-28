@@ -1,7 +1,6 @@
 use std::io::{BufReader, Read, Write};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use regex::Regex;
 use tracing::{debug, error, info, trace, warn};
 
 use quick_xml::de::Deserializer;
@@ -10,6 +9,7 @@ use quick_xml::{
     se::Serializer,
     Writer,
 };
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use zip::{write::FileOptions, ZipArchive, ZipWriter};
 
@@ -210,7 +210,7 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
                                 ObjectData::Mesh(m) => {
                                     let mut m = m.clone();
 
-                                    let transform = md_part
+                                    let transform_md = md_part
                                         .metadata
                                         .iter()
                                         .find(|m| m.key.as_deref() == Some("matrix"))
@@ -219,12 +219,14 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
                                         .clone()
                                         .unwrap();
 
-                                    let transform = transform
+                                    let transform_md = transform_md
                                         .split_whitespace()
                                         .map(|s| s.parse::<f64>().unwrap())
                                         .collect::<Vec<f64>>();
 
-                                    m.apply_transform(&transform);
+                                    let transform_component = c.transform.unwrap();
+
+                                    m.apply_transform(&transform_md, &transform_component);
 
                                     let offset = mesh.merge(&m);
 
