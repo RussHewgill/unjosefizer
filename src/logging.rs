@@ -23,14 +23,15 @@ pub fn init_logs() {
 
     // LogTracer::init().unwrap();
 
-    // let file_layer = tracing_subscriber::fmt::Layer::new()
-    //     .with_writer(trace_file)
-    //     .with_file(true)
-    //     .with_ansi(false)
-    //     .with_line_number(true)
-    //     .with_target(true)
-    //     .with_level(true)
-    //     .compact();
+    let file_layer = tracing_subscriber::fmt::Layer::new()
+        .with_writer(trace_file)
+        .with_file(true)
+        .with_ansi(false)
+        .with_line_number(true)
+        .with_target(true)
+        .with_level(true)
+        .compact()
+        .with_filter(tracing_subscriber::filter::EnvFilter::new("info,unjosefizer=trace,eframe=warn"));
 
     let stderr_layer = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stderr)
@@ -39,12 +40,10 @@ pub fn init_logs() {
         .with_line_number(true)
         .with_target(false)
         .compact()
-        .with_filter(tracing_subscriber::filter::EnvFilter::new(
-            "info,unjosefizer=debug,eframe=warn",
-        ));
+        .with_filter(tracing_subscriber::filter::EnvFilter::new("info,unjosefizer=debug,eframe=warn"));
 
     let subscriber = tracing_subscriber::registry()
-        // .with(file_layer)
+        .with(file_layer)
         .with(stderr_layer)
         .try_init()
         .unwrap();
