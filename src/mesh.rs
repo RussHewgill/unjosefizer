@@ -53,11 +53,87 @@ impl Mesh {
         assert_eq!(transform_md.len(), 16, "Object Metadata Transform must be 16 elements");
         assert_eq!(transform_component.len(), 12, "Component Transform must be 12 elements");
 
+        // #[rustfmt::skip]
+        // let transform_component = [
+        //     0.5, 0., 0.,
+        //     0., 0.5, 0.,
+        //     0., 0., 0.5,
+        //     -25.5714979, 2.06664283, -6.62699855,
+        //     // 0., 0., 0.,
+        //     // 436.98599243164062, -12.855534207646144, 125.
+        // ];
+
         let m0 = nalgebra::Matrix4::from_row_slice(&transform_md);
         let m1 = nalgebra::Matrix4x3::from_row_slice(&transform_component);
-        let m1 = m1.insert_column(3, 0.);
+        // let m1 = nalgebra::Matrix4x3::from_column_slice(&transform_component);
+        let mut m1 = m1.insert_column(3, 0.);
+        let m1 = m1.transpose();
+
+        debug!("m0");
+        for row in m0.row_iter() {
+            let mut xs = vec![];
+            for x in row.iter() {
+                let x = (x * 1e4).round() / 1e4;
+                xs.push(x);
+            }
+            debug!("{:?}", xs);
+        }
+
+        debug!("m1");
+        for row in m1.row_iter() {
+            let mut xs = vec![];
+            for x in row.iter() {
+                let x = (x * 1e4f64).round() / 1e4;
+                xs.push(x);
+            }
+            debug!("{:?}", xs);
+        }
+
+        // m1[(3, 0)] = 436.;
+        // m1[(3, 1)] = 436.;
+        // m1[(3, 2)] = 436.;
+        // m1[(3, 3)] = 0.;
 
         let m = m0 + m1;
+
+        /// 1s:
+        /// -46.86
+        /// -6.51
+        /// -19.88
+        /// 2nd:
+        /// -59.28
+        /// -25.39
+        /// -22.82
+        /// actual XY distance: ~9.0, ~8.6
+
+        debug!("m");
+        for row in m.row_iter() {
+            let mut xs = vec![];
+            for x in row.iter() {
+                let x = (x * 1e4f64).round() / 1e4;
+                xs.push(x);
+            }
+            debug!("{:?}", xs);
+        }
+
+        /// maybe scale before translate or after?
+        let mut m = m;
+
+        m[(0, 3)] = m1[(0, 3)];
+        m[(1, 3)] = m1[(1, 3)];
+        m[(2, 3)] = m1[(2, 3)];
+
+        if (m[(0, 3)] + 46.85535).abs() < 0.01 {
+            warn!("1st: {:?}", m[(0, 3)]);
+
+            // m[(0, 3)] = -50.0;
+            // m[(1, 3)] = -17.5;
+
+        } else if (m[(0, 3)] + 59.28435).abs() < 0.01 {
+            warn!("2st: {:?}", m[(0, 3)]);
+        } else {
+            warn!("unknown: {:?}", m[(0, 3)]);
+        }
 
         for v in self.vertices.vertex.iter_mut() {
             let v2 = nalgebra::Point3::new(v.x, v.y, v.z);
@@ -78,22 +154,6 @@ impl Mesh {
         use nalgebra::{Matrix3x4, Matrix4, Transform};
 
         // let m = Matrix4::from_row_slice(&transform);
-
-        // // debug!("applying matrix: {}", m);
-        // debug!("applying matrix");
-        // // #[cfg(feature = "nope")]
-        // for row in m.row_iter() {
-        //     let mut xs = vec![];
-        //     for i in 0..4 {
-        //         let x = row[i];
-        //         let x = (x * 1e5).round() / 1e5;
-        //         xs.push(x);
-        //     }
-        //     debug!("{:?}", xs);
-        //     // let mut row = row.clone().to_vec();
-        //     // debug!("{:?}", row);
-        // }
-
         warn!("using debug transform");
 
         #[rustfmt::skip]

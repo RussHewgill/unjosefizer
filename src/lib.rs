@@ -73,15 +73,28 @@ pub fn test_main() -> Result<()> {
     let v = na::Point3::new(11.4319954, 2.56300163, -1.38400126);
     let v2 = v.coords.push(1.0);
 
-    let rot = na::Rotation3::from_euler_angles(0., 1., 0.);
+    // let rot = na::Rotation3::from_euler_angles(0., 1., 0.);
 
-    for row in rot.matrix().row_iter() {
-        let mut xs = vec![];
-        for x in row.iter() {
-            xs.push(x);
-        }
-        debug!("{:?}", xs);
-    }
+    #[rustfmt::skip]
+    let transform_component = [
+        0.5, 0., 0.,
+        0., 0.5, 0.,
+        0., 0., 0.5,
+        // -25.5714979, 2.06664283, -6.62699855,
+        // 0., 0., 0.,
+        436.98599243164062, -12.855534207646144, 125.
+    ];
+
+    let m1 = nalgebra::Matrix4x3::from_column_slice(&transform_component);
+    let m = m1.insert_column(3, 0.);
+
+    // for row in m.row_iter() {
+    //     let mut xs = vec![];
+    //     for x in row.iter() {
+    //         xs.push(x);
+    //     }
+    //     debug!("{:?}", xs);
+    // }
 
     /// 3mf.cpp:1911:
     /// _create_object_instance(_, transform * component.transform, _, _)
