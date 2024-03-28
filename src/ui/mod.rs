@@ -8,34 +8,40 @@ use std::{
 };
 
 pub fn run_eframe() -> eframe::Result<()> {
+    crate::logging::init_logs();
+
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0])
             .with_min_inner_size([400.0, 300.0]),
         ..Default::default()
     };
-    eframe::run_native("UnJosefizer", native_options, Box::new(|cc| Box::new(App::default())))
+    eframe::run_native("UnJosefizer", native_options, Box::new(|cc| Box::new(App::new(cc))))
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
-    #[serde(skip)]
     input_files: Vec<PathBuf>,
-    #[serde(skip)]
     output_folder: Option<PathBuf>,
+    // #[serde(skip)]
+    // processing_rx: Option<crossbeam_channel::Receiver<crate::ProcessingEvent>>,
 }
 
-impl Default for App {
-    fn default() -> Self {
-        Self {
-            input_files: vec![],
-            output_folder: None,
+impl App {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        if let Some(storage) = cc.storage {
+            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
+        Self::default()
     }
 }
 
 impl eframe::App for App {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, self);
+    }
+
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -78,9 +84,9 @@ impl eframe::App for App {
                 self.input_files.clear();
             }
 
+            // if let Some(rx) = &self.processing_rx {}
+
             if ui.button("Process").clicked() {
-                self.output_folder = Some(PathBuf::from("Q:\\code\\unjosefizer\\debug_output"));
-                self.input_files = vec![PathBuf::from("Q:\\code\\unjosefizer\\assets\\test-orca.3mf")];
                 if let Some(output_folder) = &self.output_folder {
                     match crate::process_files(&self.input_files, output_folder) {
                         Ok(_) => {}
@@ -88,26 +94,14 @@ impl eframe::App for App {
                             error!("Error processing files: {:?}", e);
                         }
                     }
-                }
 
-                #[cfg(feature = "nope")]
-                for path in &self.input_files {
-                    info!("Processing: {:?}", path);
-                    match crate::save_load::load_3mf_orca(path) {
-                        Ok(models) => {
-                            let file_name = path.file_name().unwrap().to_str().unwrap();
-
-                            // let output_file_path = self.output_folder.as_ref().map(|output_folder| {
-                            //     output_folder.join(file_name)
-                            // });
-
-                            // save_ps_3mf(&models, ).unwrap();
-                            //
-                        }
-                        Err(e) => {
-                            error!("Error loading 3mf: {:?}", e);
-                        }
-                    }
+                    // leave threading for now
+                    // let (tx, rx) = crossbeam_channel::unbounded();
+                    // self.processing_rx = Some(rx);
+                    // std::thread::spawn(|| {
+                    //     let mut tx = tx;
+                    //     //
+                    // });
                 }
             }
 

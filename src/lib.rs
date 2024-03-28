@@ -20,25 +20,32 @@ use crate::{
     save_load::{debug_models, load_3mf_orca, load_3mf_ps, save_ps_3mf},
 };
 
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub enum ProcessingEvent {
+    FinishedFile(usize),
+    Done,
+}
+
 pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::path::PathBuf) -> Result<()> {
     for path in input_files {
         info!("Processing: {:?}", path);
-        match crate::save_load::load_3mf_orca(&path) {
-            Ok(models) => {
+        match crate::save_load::load_3mf_orca(&path.to_str().unwrap()) {
+            Ok((models, md)) => {
                 let file_name = path.file_name().unwrap().to_str().unwrap();
 
                 let file_name = file_name.replace(".3mf", "");
                 let file_name = path.with_file_name(&format!("{}_ps.3mf", file_name));
 
                 let output_file_path = output_folder.join(file_name);
+                debug!("output_file_path: {:?}", output_file_path);
 
-                // match save_ps_3mf(&models, output_file_path) {
-                //     Ok(_) => {}
-                //     Err(e) => {
-                //         error!("Error saving 3mf: {:?}", e);
-                //     }
-                // }
-                unimplemented!("TODO: save_ps_3mf");
+                match save_ps_3mf(&models, Some(&md), output_file_path) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("Error saving 3mf: {:?}", e);
+                    }
+                }
+                // unimplemented!("TODO: save_ps_3mf");
             }
             Err(e) => {
                 error!("Error loading 3mf: {:?}", e);
@@ -49,21 +56,37 @@ pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::pa
     Ok(())
 }
 
-#[cfg(feature = "nope")]
+// #[cfg(feature = "nope")]
 pub fn test_main() -> Result<()> {
+    crate::logging::init_logs();
+
     info!("orca test");
     // let path_orca = "assets/test-orca.3mf";
     // let path_orca = "assets/test-orca2.3mf";
     // let path_orca = "assets/test-orca3.3mf";
     let path_orca = "assets/test-gemstone-orca.3mf";
+
+    let t0 = std::time::Instant::now();
+
     let (models_orca, md) = load_3mf_orca(path_orca).unwrap();
+    let t1 = std::time::Instant::now();
+
     save_ps_3mf(&models_orca, Some(&md), "assets/test-ps-out.3mf").unwrap();
+    let t2 = std::time::Instant::now();
+
+    eprintln!("done");
+
+    let dur_load = t1 - t0;
+    let dur_save = t2 - t1;
+    debug!("load time: {:?}", (dur_load.as_secs_f64() * 1e3).round() / 1e3);
+    debug!("save time: {:?}", (dur_save.as_secs_f64() * 1e3).round() / 1e3);
 
     Ok(())
 }
 
-// #[cfg(feature = "nope")]
+#[cfg(feature = "nope")]
 pub fn test_main() -> Result<()> {
+    crate::logging::init_logs();
     use nalgebra as na;
 
     let path_orca = "assets/test-gemstone-orca.3mf";

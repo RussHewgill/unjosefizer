@@ -8,8 +8,6 @@
 use unjosefizer_lib::{logging::init_logs, *};
 
 fn main() {
-    init_logs();
-
-    test_main().unwrap();
-    // ui::run_eframe().unwrap();
+    // test_main().unwrap();
+    ui::run_eframe().unwrap();
 }

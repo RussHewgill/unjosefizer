@@ -69,25 +69,24 @@ impl Mesh {
         let mut m1 = m1.insert_column(3, 0.);
         let m1 = m1.transpose();
 
-        debug!("m0");
-        for row in m0.row_iter() {
-            let mut xs = vec![];
-            for x in row.iter() {
-                let x = (x * 1e4).round() / 1e4;
-                xs.push(x);
-            }
-            debug!("{:?}", xs);
-        }
-
-        debug!("m1");
-        for row in m1.row_iter() {
-            let mut xs = vec![];
-            for x in row.iter() {
-                let x = (x * 1e4f64).round() / 1e4;
-                xs.push(x);
-            }
-            debug!("{:?}", xs);
-        }
+        // debug!("m0");
+        // for row in m0.row_iter() {
+        //     let mut xs = vec![];
+        //     for x in row.iter() {
+        //         let x = (x * 1e4).round() / 1e4;
+        //         xs.push(x);
+        //     }
+        //     debug!("{:?}", xs);
+        // }
+        // debug!("m1");
+        // for row in m1.row_iter() {
+        //     let mut xs = vec![];
+        //     for x in row.iter() {
+        //         let x = (x * 1e4f64).round() / 1e4;
+        //         xs.push(x);
+        //     }
+        //     debug!("{:?}", xs);
+        // }
 
         // m1[(3, 0)] = 436.;
         // m1[(3, 1)] = 436.;
@@ -106,14 +105,14 @@ impl Mesh {
         /// -22.82
         /// actual XY distance: ~9.0, ~8.6
 
-        debug!("m");
+        // debug!("m");
         for row in m.row_iter() {
             let mut xs = vec![];
             for x in row.iter() {
                 let x = (x * 1e4f64).round() / 1e4;
                 xs.push(x);
             }
-            debug!("{:?}", xs);
+            // debug!("{:?}", xs);
         }
 
         /// not sure what the translation values in m0 are for

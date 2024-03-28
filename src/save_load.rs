@@ -3,6 +3,8 @@ use std::io::{BufReader, Read, Write};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use tracing::{debug, error, info, trace, warn};
 
+use rayon::prelude::*;
+
 use quick_xml::de::Deserializer;
 use quick_xml::{
     events::{BytesDecl, Event},
@@ -73,8 +75,13 @@ pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], metadata: Option
 ///
 /// In Orca, each object has one or more components, with the attribute `p:path`
 /// that points to a separate model file, and an `objectid` specifying which object.
-pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, PSMetadata)> {
-    let mut reader = std::fs::File::open(path)?;
+// pub fn load_3mf_orca<P: AsRef<std::path::Path> + Send + Sync>(path: P) -> Result<(Vec<Model>, PSMetadata)> {
+pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
+    // let mut reader = std::fs::File::open(path)?;
+    // let mut reader = std::io::BufReader::new(reader);
+
+    let file = std::fs::read(path).unwrap();
+    let mut reader = std::io::Cursor::new(&file);
 
     let mut zip = ZipArchive::new(reader)?;
     let mut models = vec![];
@@ -111,187 +118,207 @@ pub fn load_3mf_orca<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, 
     let md_orca = md_orca.unwrap();
 
     let mut out = vec![];
-    // let mut md2 = None;
     let mut md_ps = PSMetadata { object: vec![] };
 
-    for (m, model) in models.iter().enumerate() {
-        let mut model2 = model.clone();
-
-        model2.resources.object = vec![];
+    if models.len() != 1 {
+        warn!("expected 1 model, got {}", models.len());
+    }
+    for (m, model) in models.into_iter().enumerate() {
+        debug!("model[{}]", m);
+        let mut model2 = Model {
+            xmlns: model.xmlns.clone(),
+            metadata: model.metadata.clone(),
+            resources: Resources {
+                object: vec![],
+                basematerials: model.resources.basematerials.clone(),
+            },
+            build: model.build.clone(),
+            unit: model.unit.clone(),
+        };
 
         model2.metadata.push(Metadata {
             name: "slic3rpe:Version3mf".to_string(),
             value: Some("1".to_string()),
         });
 
-        // let md = md_orca.object.find(|o| o)
-        // let mut md2 = ps::Object {
-        // }
+        let xs = model
+            .resources
+            .object
+            .par_iter()
+            // .iter()
+            .map(|object| {
+                debug!("object[{}]", object.id);
 
-        debug!("model[{}]", m);
-        for object in model.resources.object.iter() {
-            debug!("object[{}]", object.id);
+                // let mut reader = std::fs::File::open(path).unwrap();
+                // let mut reader = std::io::BufReader::new(reader);
+                // let mut zip2 = ZipArchive::new(reader).unwrap();
+                // let zip2 = &mut zip;
 
-            /// get the orca metadata for this object
-            let md_object = md_orca.object.iter().find(|o| o.id == object.id).unwrap();
+                // let mut reader = std::io::BufReader::new(s.as_bytes());
+                let mut reader = std::io::Cursor::new(&file);
+                let mut zip2 = ZipArchive::new(reader).unwrap();
 
-            let mut object2 = object.clone();
-            object2.ty = Some("model".to_string());
+                /// get the orca metadata for this object
+                let md_object = md_orca.object.iter().find(|o| o.id == object.id).unwrap();
 
-            let mut ps_md = ps::Object {
-                id: object.id,
-                /// orca doesn't have instances
-                instances_count: 1,
-                // ty: "model".to_string(),
-                metadata: vec![],
-                volume: vec![],
-            };
+                let mut object2 = object.clone();
+                object2.ty = Some("model".to_string());
 
-            for md in md_object.metadata.iter() {
-                if md.key.as_deref() == Some("name") {
-                    ps_md.metadata.push(ps::Metadata {
-                        ty: "object".to_string(),
-                        key: md.key.clone(),
-                        value: md.value.clone(),
-                    });
+                let mut ps_md = ps::Object {
+                    id: object.id,
+                    /// orca doesn't have instances
+                    instances_count: 1,
+                    // ty: "model".to_string(),
+                    metadata: vec![],
+                    volume: vec![],
+                };
+
+                for md in md_object.metadata.iter() {
+                    if md.key.as_deref() == Some("name") {
+                        ps_md.metadata.push(ps::Metadata {
+                            ty: "object".to_string(),
+                            key: md.key.clone(),
+                            value: md.value.clone(),
+                        });
+                    }
                 }
-            }
 
-            match &object.object {
-                ObjectData::Mesh(mesh) => {
-                    debug!("mesh.vertices.vertex.len() = {:?}", mesh.vertices.vertex.len());
-                    debug!("mesh.triangles.triangle.len() = {:?}", mesh.triangles.triangle.len());
-                }
-                ObjectData::Components { component } => {
-                    let mut mesh = Mesh {
-                        vertices: Vertices { vertex: vec![] },
-                        triangles: Triangles { triangle: vec![] },
-                    };
-
-                    let mut prev_id = 0;
-
-                    for c in component.iter() {
-                        debug!("component[{}]", c.objectid);
-                        // debug!("objectid = {:?}", c.objectid);
-                        // debug!("transform = {:?}", c.transform);
-                        // debug!("c.path = {:?}", c.path);
-
-                        let Some(path) = c.path.clone() else {
-                            panic!("I don't know why this would panic.");
+                match &object.object {
+                    ObjectData::Mesh(mesh) => {
+                        debug!("mesh.vertices.vertex.len() = {:?}", mesh.vertices.vertex.len());
+                        debug!("mesh.triangles.triangle.len() = {:?}", mesh.triangles.triangle.len());
+                    }
+                    ObjectData::Components { component } => {
+                        let mut mesh = Mesh {
+                            vertices: Vertices { vertex: vec![] },
+                            triangles: Triangles { triangle: vec![] },
                         };
-                        let path = &path[1..];
-                        // debug!("path = {:?}", path);
 
-                        let sub_id = c.objectid;
+                        let mut prev_id = 0;
 
-                        /// load the component model from the path
-                        let mut f = zip.by_name(&path)?;
-                        let mut s = String::new();
-                        f.read_to_string(&mut s)?;
+                        for c in component.iter() {
+                            // debug!("component[{}]", c.objectid);
+                            // debug!("objectid = {:?}", c.objectid);
+                            // debug!("transform = {:?}", c.transform);
+                            // debug!("c.path = {:?}", c.path);
 
-                        let mut de = Deserializer::from_str(&s);
-                        let sub_model = Model::deserialize(&mut de)?;
+                            let Some(path) = c.path.clone() else {
+                                panic!("I don't know why this would panic.");
+                            };
+                            let path = &path[1..];
+                            // debug!("path = {:?}", path);
 
-                        // // /// get the transform matrix from the component
-                        // let transform = c.transform;
+                            let sub_id = c.objectid;
 
-                        /// for each mesh, smoosh models together and record the offsets
-                        ///
-                        /// TODO: prusaslicer expects the verts to already be transformed to local space?
-                        for sub_model_object in sub_model.resources.object.iter() {
-                            let id = sub_model_object.id;
-                            if id != sub_id {
-                                continue;
-                            }
+                            /// load the component model from the path
+                            let mut f = zip2.by_name(&path).unwrap();
+                            let mut s = String::new();
+                            f.read_to_string(&mut s).unwrap();
 
-                            let md_part = md_object.part.iter().find(|p| p.id == id).unwrap();
+                            let mut de = Deserializer::from_str(&s);
+                            let sub_model = Model::deserialize(&mut de).unwrap();
 
-                            match &sub_model_object.object {
-                                ObjectData::Mesh(m) => {
-                                    let mut m = m.clone();
-
-                                    let transform_md = md_part
-                                        .metadata
-                                        .iter()
-                                        .find(|m| m.key.as_deref() == Some("matrix"))
-                                        .unwrap()
-                                        .value
-                                        .clone()
-                                        .unwrap();
-
-                                    let transform_md = transform_md
-                                        .split_whitespace()
-                                        .map(|s| s.parse::<f64>().unwrap())
-                                        .collect::<Vec<f64>>();
-
-                                    let transform_component = c.transform.unwrap();
-
-                                    m.apply_transform(&transform_md, &transform_component);
-
-                                    let offset = mesh.merge(&m);
-
-                                    let mut md_volume = ps::Volume {
-                                        firstid: prev_id,
-                                        lastid: mesh.triangles.triangle.len() - 1,
-                                        metadata: vec![],
-                                        mesh: ps::Mesh {
-                                            edges_fixed: md_part.mesh_stat.edges_fixed,
-                                            degenerate_facets: md_part.mesh_stat.degenerate_facets,
-                                            facets_removed: md_part.mesh_stat.facets_removed,
-                                            facets_reversed: md_part.mesh_stat.facets_reversed,
-                                            backwards_edges: md_part.mesh_stat.backwards_edges,
-                                        },
-                                    };
-
-                                    if let Some(name) = md_part
-                                        .metadata
-                                        .iter()
-                                        .find(|m| m.key.as_deref() == Some("name"))
-                                        .unwrap()
-                                        .value
-                                        .clone()
-                                    {
-                                        md_volume.metadata.push(ps::Metadata {
-                                            ty: "volume".to_string(),
-                                            key: Some("name".to_string()),
-                                            value: Some(name),
-                                        });
-                                    }
-
-                                    if let Some(matrix) = md_part
-                                        .metadata
-                                        .iter()
-                                        .find(|m| m.key.as_deref() == Some("matrix"))
-                                        .unwrap()
-                                        .value
-                                        .clone()
-                                    {
-                                        md_volume.metadata.push(ps::Metadata {
-                                            ty: "volume".to_string(),
-                                            key: Some("matrix".to_string()),
-                                            value: Some(matrix),
-                                        });
-                                    }
-
-                                    ps_md.volume.push(md_volume);
-
-                                    prev_id = mesh.triangles.triangle.len();
-                                    debug!("setting prev_id to {}", prev_id);
+                            /// for each mesh, smoosh models together and record the offsets
+                            ///
+                            /// TODO: prusaslicer expects the verts to already be transformed to local space?
+                            for sub_model_object in sub_model.resources.object.iter() {
+                                let id = sub_model_object.id;
+                                if id != sub_id {
+                                    continue;
                                 }
-                                ObjectData::Components { component } => {
-                                    panic!("nested components instead of mesh?");
+
+                                let md_part = md_object.part.iter().find(|p| p.id == id).unwrap();
+
+                                match &sub_model_object.object {
+                                    ObjectData::Mesh(m) => {
+                                        let mut m = m.clone();
+
+                                        let transform_md = md_part
+                                            .metadata
+                                            .iter()
+                                            .find(|m| m.key.as_deref() == Some("matrix"))
+                                            .unwrap()
+                                            .value
+                                            .clone()
+                                            .unwrap();
+
+                                        let transform_md = transform_md
+                                            .split_whitespace()
+                                            .map(|s| s.parse::<f64>().unwrap())
+                                            .collect::<Vec<f64>>();
+
+                                        let transform_component = c.transform.unwrap();
+
+                                        m.apply_transform(&transform_md, &transform_component);
+
+                                        let offset = mesh.merge(&m);
+
+                                        let mut md_volume = ps::Volume {
+                                            firstid: prev_id,
+                                            lastid: mesh.triangles.triangle.len() - 1,
+                                            metadata: vec![],
+                                            mesh: ps::Mesh {
+                                                edges_fixed: md_part.mesh_stat.edges_fixed,
+                                                degenerate_facets: md_part.mesh_stat.degenerate_facets,
+                                                facets_removed: md_part.mesh_stat.facets_removed,
+                                                facets_reversed: md_part.mesh_stat.facets_reversed,
+                                                backwards_edges: md_part.mesh_stat.backwards_edges,
+                                            },
+                                        };
+
+                                        if let Some(name) = md_part
+                                            .metadata
+                                            .iter()
+                                            .find(|m| m.key.as_deref() == Some("name"))
+                                            .unwrap()
+                                            .value
+                                            .clone()
+                                        {
+                                            md_volume.metadata.push(ps::Metadata {
+                                                ty: "volume".to_string(),
+                                                key: Some("name".to_string()),
+                                                value: Some(name),
+                                            });
+                                        }
+
+                                        if let Some(matrix) = md_part
+                                            .metadata
+                                            .iter()
+                                            .find(|m| m.key.as_deref() == Some("matrix"))
+                                            .unwrap()
+                                            .value
+                                            .clone()
+                                        {
+                                            md_volume.metadata.push(ps::Metadata {
+                                                ty: "volume".to_string(),
+                                                key: Some("matrix".to_string()),
+                                                value: Some(matrix),
+                                            });
+                                        }
+
+                                        ps_md.volume.push(md_volume);
+
+                                        prev_id = mesh.triangles.triangle.len();
+                                        // debug!("setting prev_id to {}", prev_id);
+                                    }
+                                    ObjectData::Components { component } => {
+                                        panic!("nested components instead of mesh?");
+                                    }
                                 }
                             }
                         }
+
+                        mesh.to_ps();
+                        object2.object = ObjectData::Mesh(mesh);
                     }
-
-                    mesh.to_ps();
-                    object2.object = ObjectData::Mesh(mesh);
                 }
-            }
 
+                (object2, ps_md)
+            })
+            .collect::<Vec<_>>();
+
+        for (object2, ps_md) in xs {
             model2.resources.object.push(object2);
-            // I am so good at naming variables
             md_ps.object.push(ps_md);
         }
 
