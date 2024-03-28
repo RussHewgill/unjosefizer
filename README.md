@@ -15,3 +15,7 @@ To run, `git clone` or download this repository, and run
 ```
 cargo build --release
 ```
+
+## If this is helpful, consider buying me a coffee
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I3I1W8O4I)
