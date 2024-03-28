@@ -7,4 +7,11 @@ Unjosefizer is a Rust application that will load a `.3mf` file saved by Orca Sli
 - Essentially everything except meshes and MMU painting will be discarded
 - Modifiers and Parts are not supported
 
+## Running
+
+To run, you will need [Rust](https://www.rust-lang.org/tools/install installed).
+
+To run, `git clone` or download this repository, and run
+```
+cargo build --release
 ```

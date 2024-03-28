@@ -116,24 +116,21 @@ impl Mesh {
             debug!("{:?}", xs);
         }
 
-        /// maybe scale before translate or after?
+        /// not sure what the translation values in m0 are for
         let mut m = m;
-
         m[(0, 3)] = m1[(0, 3)];
         m[(1, 3)] = m1[(1, 3)];
         m[(2, 3)] = m1[(2, 3)];
 
-        if (m[(0, 3)] + 46.85535).abs() < 0.01 {
-            warn!("1st: {:?}", m[(0, 3)]);
-
-            // m[(0, 3)] = -50.0;
-            // m[(1, 3)] = -17.5;
-
-        } else if (m[(0, 3)] + 59.28435).abs() < 0.01 {
-            warn!("2st: {:?}", m[(0, 3)]);
-        } else {
-            warn!("unknown: {:?}", m[(0, 3)]);
-        }
+        // if (m[(0, 3)] + 46.85535).abs() < 0.01 {
+        //     warn!("1st: {:?}", m[(0, 3)]);
+        //     // m[(0, 3)] = -50.0;
+        //     // m[(1, 3)] = -17.5;
+        // } else if (m[(0, 3)] + 59.28435).abs() < 0.01 {
+        //     warn!("2st: {:?}", m[(0, 3)]);
+        // } else {
+        //     warn!("unknown: {:?}", m[(0, 3)]);
+        // }
 
         for v in self.vertices.vertex.iter_mut() {
             let v2 = nalgebra::Point3::new(v.x, v.y, v.z);
