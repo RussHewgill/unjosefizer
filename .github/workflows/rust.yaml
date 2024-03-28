@@ -17,6 +17,13 @@ jobs:
             name: UnJosefizer-Linux-x86_64-musl.tar.gz
             command: build
 
+          - release_for: macOS-x86_64
+            os: macOS-latest
+            target: x86_64-apple-darwin
+            bin: unjosefizer
+            name: UnJosefizer-Darwin-x86_64.tar.gz
+            command: build
+
           - release_for: Windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -24,12 +31,7 @@ jobs:
             name: UnJosefizer-Windows-x86_64.zip
             command: build
 
-          - release_for: macOS-x86_64
-            os: macOS-latest
-            target: x86_64-apple-darwin
-            bin: unjosefizer
-            name: UnJosefizer-Darwin-x86_64.tar.gz
-            command: build
+
 
     runs-on:  ${{ matrix.platform.os }}
 
@@ -39,6 +41,9 @@ jobs:
     - run: rustup toolchain install stable --profile minimal
     - name: Cache cargo & target directories
       uses: Swatinem/rust-cache@v2
+    - name: Install musl-tools on Linux
+      run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools
+      if: contains(matrix.platform.name, 'musl')
     - name: Build
       uses: houseabsolute/actions-rust-cross@v0.0.12
       with:
