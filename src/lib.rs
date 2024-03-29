@@ -6,6 +6,7 @@
 #![allow(unused_labels)]
 
 pub mod logging;
+pub mod paint_sharing;
 pub mod mesh;
 pub mod metadata;
 pub mod model;

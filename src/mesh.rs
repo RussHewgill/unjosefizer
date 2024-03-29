@@ -49,70 +49,33 @@ impl Mesh {
         }
     }
 
+    pub fn remove_verts(&mut self) -> Vec<Vertex> {
+        let mut out = vec![];
+        std::mem::swap(&mut out, &mut self.vertices.vertex);
+        out
+    }
+
+    pub fn apply_verts(&mut self, verts: &[Vertex]) {
+        self.vertices.vertex = verts.to_vec();
+    }
+
     pub fn apply_transform(&mut self, transform_md: &[f64], transform_component: &[f64]) {
         assert_eq!(transform_md.len(), 16, "Object Metadata Transform must be 16 elements");
         assert_eq!(transform_component.len(), 12, "Component Transform must be 12 elements");
 
-        // #[rustfmt::skip]
-        // let transform_component = [
-        //     0.5, 0., 0.,
-        //     0., 0.5, 0.,
-        //     0., 0., 0.5,
-        //     -25.5714979, 2.06664283, -6.62699855,
-        //     // 0., 0., 0.,
-        //     // 436.98599243164062, -12.855534207646144, 125.
-        // ];
-
         let m0 = nalgebra::Matrix4::from_row_slice(&transform_md);
         let m1 = nalgebra::Matrix4x3::from_row_slice(&transform_component);
-        // let m1 = nalgebra::Matrix4x3::from_column_slice(&transform_component);
         let mut m1 = m1.insert_column(3, 0.);
         let m1 = m1.transpose();
 
-        // debug!("m0");
-        // for row in m0.row_iter() {
-        //     let mut xs = vec![];
-        //     for x in row.iter() {
-        //         let x = (x * 1e4).round() / 1e4;
-        //         xs.push(x);
-        //     }
-        //     debug!("{:?}", xs);
-        // }
-        // debug!("m1");
-        // for row in m1.row_iter() {
-        //     let mut xs = vec![];
-        //     for x in row.iter() {
-        //         let x = (x * 1e4f64).round() / 1e4;
-        //         xs.push(x);
-        //     }
-        //     debug!("{:?}", xs);
-        // }
-
-        // m1[(3, 0)] = 436.;
-        // m1[(3, 1)] = 436.;
-        // m1[(3, 2)] = 436.;
-        // m1[(3, 3)] = 0.;
-
         let m = m0 + m1;
 
-        /// 1s:
-        /// -46.86
-        /// -6.51
-        /// -19.88
-        /// 2nd:
-        /// -59.28
-        /// -25.39
-        /// -22.82
-        /// actual XY distance: ~9.0, ~8.6
-
-        // debug!("m");
         for row in m.row_iter() {
             let mut xs = vec![];
             for x in row.iter() {
                 let x = (x * 1e4f64).round() / 1e4;
                 xs.push(x);
             }
-            // debug!("{:?}", xs);
         }
 
         /// not sure what the translation values in m0 are for
@@ -121,16 +84,6 @@ impl Mesh {
         m[(1, 3)] = m1[(1, 3)];
         m[(2, 3)] = m1[(2, 3)];
 
-        // if (m[(0, 3)] + 46.85535).abs() < 0.01 {
-        //     warn!("1st: {:?}", m[(0, 3)]);
-        //     // m[(0, 3)] = -50.0;
-        //     // m[(1, 3)] = -17.5;
-        // } else if (m[(0, 3)] + 59.28435).abs() < 0.01 {
-        //     warn!("2st: {:?}", m[(0, 3)]);
-        // } else {
-        //     warn!("unknown: {:?}", m[(0, 3)]);
-        // }
-
         for v in self.vertices.vertex.iter_mut() {
             let v2 = nalgebra::Point3::new(v.x, v.y, v.z);
             let v2 = v2.coords.push(1.0);
@@ -141,77 +94,6 @@ impl Mesh {
             v.y = v2.y;
             v.z = v2.z;
         }
-    }
-
-    #[cfg(feature = "nope")]
-    pub fn apply_transform(&mut self, transform: &[f64]) {
-        // assert_eq!(transform.len(), 12, "Transform must be 12 elements");
-        assert_eq!(transform.len(), 16, "Transform must be 16 elements");
-        use nalgebra::{Matrix3x4, Matrix4, Transform};
-
-        // let m = Matrix4::from_row_slice(&transform);
-        warn!("using debug transform");
-
-        #[rustfmt::skip]
-        let m_assemble = [
-            1., 0., 0., 
-            0., 1., 0., 
-            0., 0., 1., 
-            436.98599243164062, -12.855534207646144, 125.
-        ];
-
-        let m2 = nalgebra::Matrix4x3::from_row_slice(&m_assemble);
-
-        let m2 = m2.insert_column(3, 0.);
-
-        #[rustfmt::skip]
-        let m_component = [
-            0.5, 0., 0.,
-            0., 0.5, 0.,
-            0., 0., 0.5,
-            -25.5714979, 2.06664283, -6.62699855,
-        ];
-
-        let m3 = nalgebra::Matrix4x3::from_row_slice(&m_component);
-        let m3 = m3.insert_column(3, 0.);
-
-        #[rustfmt::skip]
-        let m = [
-            0., 0., 0., -21.283855452001696,
-            0., 0., 0., -8.5752848959992711,
-            // 0., 0., 0., -36.213425626000181, 
-            // 0., 0., 0., -2.2209996180004223, 
-            0., 0., 0., -13.253997100003012, 
-            0., 0., 0., 1.,
-        ];
-        let m = nalgebra::Matrix4::from_row_slice(&m);
-
-        let m = m + m2;
-
-        /// from model_settings.config, part translation
-        /// 1 0 0 X
-        /// 0 1 0 Y
-        /// 0 0 1 Z
-        /// 0 0 0 1
-        ///
-        /// scale:
-        /// X 0 0 0
-        /// 0 Y 0 0
-        /// 0 0 Z 0
-        /// 0 0 0 1
-        for v in self.vertices.vertex.iter_mut() {
-            let v2 = nalgebra::Point3::new(v.x, v.y, v.z);
-            let v2 = v2.coords.push(1.0);
-
-            let v2 = m * v2;
-
-            v.x = v2.x;
-            v.y = v2.y;
-            v.z = v2.z;
-        }
-
-        // m.trans
-        //
     }
 }
 
@@ -230,7 +112,7 @@ pub struct Triangles {
 }
 
 /// A vertex in a triangle mesh
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 pub struct Vertex {
     #[serde(rename = "@x")]
     pub x: f64,
