@@ -13,6 +13,7 @@ pub mod save_load;
 pub mod ui;
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
+use crossbeam_channel::Sender;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::{
@@ -26,8 +27,8 @@ pub enum ProcessingEvent {
     Done,
 }
 
-pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::path::PathBuf) -> Result<()> {
-    for path in input_files {
+pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::path::PathBuf, tx: Sender<ProcessingEvent>) -> Result<()> {
+    for (i, path) in input_files.iter().enumerate() {
         info!("Processing: {:?}", path);
         info!("output_folder: {:?}", output_folder);
         match crate::save_load::load_3mf_orca(&path.to_str().unwrap()) {
@@ -51,7 +52,9 @@ pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::pa
                 error!("Error loading 3mf: {:?}", e);
             }
         }
+        tx.send(ProcessingEvent::FinishedFile(i)).unwrap();
     }
+    tx.send(ProcessingEvent::Done).unwrap();
 
     Ok(())
 }

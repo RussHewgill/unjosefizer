@@ -7,6 +7,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::ProcessingEvent;
+
 pub fn run_eframe() -> eframe::Result<()> {
     crate::logging::init_logs();
 
@@ -24,8 +26,10 @@ pub fn run_eframe() -> eframe::Result<()> {
 pub struct App {
     input_files: Vec<PathBuf>,
     output_folder: Option<PathBuf>,
-    // #[serde(skip)]
-    // processing_rx: Option<crossbeam_channel::Receiver<crate::ProcessingEvent>>,
+    #[serde(skip)]
+    processing_rx: Option<crossbeam_channel::Receiver<crate::ProcessingEvent>>,
+    #[serde(skip)]
+    last_event: Option<ProcessingEvent>,
 }
 
 impl App {
@@ -84,24 +88,42 @@ impl eframe::App for App {
                 self.input_files.clear();
             }
 
-            // if let Some(rx) = &self.processing_rx {}
+            if let Some(rx) = &self.processing_rx {
+                if let Some(event) = rx.try_recv().ok() {
+                    self.last_event = Some(event);
+                }
 
-            if ui.button("Process").clicked() {
-                if let Some(output_folder) = &self.output_folder {
-                    match crate::process_files(&self.input_files, output_folder) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!("Error processing files: {:?}", e);
+                if let Some(event) = &self.last_event {
+                    match event {
+                        ProcessingEvent::FinishedFile(i) => {
+                            ui.label(format!("Finished file: {}", i));
+                        }
+                        ProcessingEvent::Done => {
+                            ui.label("Done processing files");
+                            self.processing_rx = None;
                         }
                     }
+                } else {
+                    ui.label("Processing");
+                }
 
-                    // leave threading for now
-                    // let (tx, rx) = crossbeam_channel::unbounded();
-                    // self.processing_rx = Some(rx);
-                    // std::thread::spawn(|| {
-                    //     let mut tx = tx;
-                    //     //
-                    // });
+                //
+            } else if ui.button("Process").clicked() {
+                if let Some(output_folder) = &self.output_folder {
+                    let (tx, rx) = crossbeam_channel::unbounded();
+                    self.processing_rx = Some(rx);
+                    let inputs = self.input_files.clone();
+                    let output_folder = output_folder.clone();
+
+                    std::thread::spawn(move || {
+                        match crate::process_files(&inputs, &output_folder, tx) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!("Error processing files: {:?}", e);
+                            }
+                        }
+                        //
+                    });
                 }
             }
 
