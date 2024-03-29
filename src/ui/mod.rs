@@ -5,6 +5,7 @@ use egui_file::FileDialog;
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use crate::ProcessingEvent;
@@ -30,6 +31,8 @@ pub struct App {
     processing_rx: Option<crossbeam_channel::Receiver<crate::ProcessingEvent>>,
     #[serde(skip)]
     messages: Vec<String>,
+    #[serde(skip)]
+    start_time: Option<Instant>,
 }
 
 impl App {
@@ -70,12 +73,11 @@ impl eframe::App for App {
             ui.label("Input files:");
             ui.group(|ui| {
                 let mut to_remove = vec![];
-                for path in self.input_files.iter() {
+                for (i, path) in self.input_files.iter().enumerate() {
                     ui.horizontal(|ui| {
-                        ui.monospace(path.display().to_string());
+                        ui.monospace(format!("{: >2}: {}", i + 1, path.display()));
                         if ui.button("Remove").clicked() {
                             to_remove.push(path.clone());
-                            // self.input_files.retain(|p| p != path);
                         }
                     });
                 }
@@ -99,19 +101,33 @@ impl eframe::App for App {
                 let mut done = false;
                 while let Some(event) = rx.try_recv().ok() {
                     match event {
-                        ProcessingEvent::FinishedFile(i) => {
-                            self.messages.push(format!("Finished file: {}", i));
+                        ProcessingEvent::StartedFile(i) => {
+                            self.messages.push(format!("Started file: {}", i + 1));
+                        }
+                        ProcessingEvent::LoadedFile(i, dt) => {
+                            let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
+                            info!("{}", m);
+                            self.messages.push(format!("Loaded file: {} in {:.1}s", i + 1, dt.as_secs_f64()));
+                        }
+                        ProcessingEvent::FinishedFile(i, dt) => {
+                            let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
+                            info!("{}", m);
+                            self.messages.push(m);
                         }
                         ProcessingEvent::Warning(w) => {
                             self.messages.push(format!("Warning: {}", w));
                         }
                         ProcessingEvent::Done => {
-                            self.messages.push("Done processing files".to_owned());
+                            let elapsed = self.start_time.unwrap().elapsed();
+                            self.messages
+                                .push(format!("Done processing files in {:.1}s", elapsed.as_secs_f64()));
                             done = true;
                             break;
                         }
                         ProcessingEvent::Failed => {
-                            self.messages.push("Error processing files".to_owned());
+                            let elapsed = self.start_time.unwrap().elapsed();
+                            self.messages
+                                .push(format!("Error processing files in {:.1}s", elapsed.as_secs_f64()));
                             done = true;
                             break;
                         }
@@ -120,6 +136,7 @@ impl eframe::App for App {
 
                 if done {
                     self.processing_rx = None;
+                    self.start_time = None;
                 }
             } else if button {
                 if let Some(output_folder) = &self.output_folder {
@@ -128,6 +145,7 @@ impl eframe::App for App {
                     let inputs = self.input_files.clone();
                     let output_folder = output_folder.clone();
 
+                    self.start_time = Some(Instant::now());
                     std::thread::spawn(move || {
                         match crate::process_files(&inputs, &output_folder, tx) {
                             Ok(_) => {}

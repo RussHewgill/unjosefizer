@@ -12,7 +12,7 @@ pub mod model;
 pub mod save_load;
 pub mod ui;
 
-use std::f32::consts::E;
+use std::{f32::consts::E, time::Duration};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use crossbeam_channel::Sender;
@@ -25,7 +25,9 @@ use crate::{
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ProcessingEvent {
-    FinishedFile(usize),
+    StartedFile(usize),
+    LoadedFile(usize, Duration),
+    FinishedFile(usize, Duration),
     Done,
     Failed,
     Warning(String),
@@ -47,8 +49,13 @@ pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::pa
             tx.send(ProcessingEvent::Warning(format!("Invalid path: {:?}", path)))?;
             continue;
         };
-        match crate::save_load::load_3mf_orca(&path2) {
+        let t0 = std::time::Instant::now();
+        let loaded = crate::save_load::load_3mf_orca(&path2);
+        let t1 = std::time::Instant::now();
+        match loaded {
             Ok((models, md)) => {
+                tx.send(ProcessingEvent::LoadedFile(i, t0.elapsed()))?;
+
                 let Some(file_name) = path.file_name() else {
                     warn!("Invalid file name: {:?}", path);
                     tx.send(ProcessingEvent::Warning(format!("Invalid file name: {:?}", path)))?;
@@ -66,18 +73,22 @@ pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::pa
                 let output_file_path = output_folder.join(file_name);
 
                 match save_ps_3mf(&models, Some(&md), output_file_path) {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        tx.send(ProcessingEvent::FinishedFile(i, t1.elapsed()))?;
+                    }
                     Err(e) => {
                         error!("Error saving 3mf: {:?}", e);
+                        tx.send(ProcessingEvent::Warning(format!("Error saving 3mf: {:?}", e)))?;
                     }
                 }
                 // unimplemented!("TODO: save_ps_3mf");
             }
             Err(e) => {
-                error!("Error loading 3mf: {:?}", e);
+                let e = format!("Error loading 3mf: {:?}", e);
+                error!("{}", e);
+                tx.send(ProcessingEvent::Warning(e))?;
             }
         }
-        tx.send(ProcessingEvent::FinishedFile(i))?;
     }
     tx.send(ProcessingEvent::Done)?;
 
