@@ -29,15 +29,15 @@ pub enum ProcessingEvent {
 pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::path::PathBuf) -> Result<()> {
     for path in input_files {
         info!("Processing: {:?}", path);
+        info!("output_folder: {:?}", output_folder);
         match crate::save_load::load_3mf_orca(&path.to_str().unwrap()) {
             Ok((models, md)) => {
                 let file_name = path.file_name().unwrap().to_str().unwrap();
 
                 let file_name = file_name.replace(".3mf", "");
-                let file_name = path.with_file_name(&format!("{}_ps.3mf", file_name));
+                let file_name = format!("{}_ps.3mf", file_name);
 
                 let output_file_path = output_folder.join(file_name);
-                debug!("output_file_path: {:?}", output_file_path);
 
                 match save_ps_3mf(&models, Some(&md), output_file_path) {
                     Ok(_) => {}
