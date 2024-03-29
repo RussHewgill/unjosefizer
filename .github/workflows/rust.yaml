@@ -55,7 +55,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: UnJosefizer-${{ matrix.platform.os_name }}
+        name: UnJosefizer-${{ matrix.platform.os_name }}-${{ matrix.platform.bin }}
         path: ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
 
 
