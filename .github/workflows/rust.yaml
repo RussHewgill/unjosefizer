@@ -3,6 +3,9 @@ name: Rust project CI
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
 
@@ -56,5 +59,10 @@ jobs:
         name: UnJosefizer-${{ matrix.platform.os_name }}-${{ matrix.platform.bin }}
         path: ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
 
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          ./target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
 
-              
