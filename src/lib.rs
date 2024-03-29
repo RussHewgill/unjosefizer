@@ -12,6 +12,8 @@ pub mod model;
 pub mod save_load;
 pub mod ui;
 
+use std::f32::consts::E;
+
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use crossbeam_channel::Sender;
 use tracing::{debug, error, info, trace, warn};
@@ -21,19 +23,42 @@ use crate::{
     save_load::{debug_models, load_3mf_orca, load_3mf_ps, save_ps_3mf},
 };
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ProcessingEvent {
     FinishedFile(usize),
     Done,
+    Failed,
+    Warning(String),
 }
 
 pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::path::PathBuf, tx: Sender<ProcessingEvent>) -> Result<()> {
+    if !output_folder.is_dir() {
+        error!("Invalid output folder: {:?}", output_folder);
+        tx.send(ProcessingEvent::Failed)?;
+        return Ok(())
+    }
+
     for (i, path) in input_files.iter().enumerate() {
         info!("Processing: {:?}", path);
         info!("output_folder: {:?}", output_folder);
-        match crate::save_load::load_3mf_orca(&path.to_str().unwrap()) {
+
+        let Some(path2) = &path.to_str() else {
+            warn!("Invalid path: {:?}", path);
+            tx.send(ProcessingEvent::Warning(format!("Invalid path: {:?}", path)))?;
+            continue;
+        };
+        match crate::save_load::load_3mf_orca(&path2) {
             Ok((models, md)) => {
-                let file_name = path.file_name().unwrap().to_str().unwrap();
+                let Some(file_name) = path.file_name() else {
+                    warn!("Invalid file name: {:?}", path);
+                    tx.send(ProcessingEvent::Warning(format!("Invalid file name: {:?}", path)))?;
+                    continue;
+                };
+                let Some(file_name) = file_name.to_str() else {
+                    warn!("Invalid file name: {:?}", path);
+                    tx.send(ProcessingEvent::Warning(format!("Invalid file name: {:?}", path)))?;
+                    continue;
+                };
 
                 let file_name = file_name.replace(".3mf", "");
                 let file_name = format!("{}_ps.3mf", file_name);
@@ -52,9 +77,9 @@ pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::pa
                 error!("Error loading 3mf: {:?}", e);
             }
         }
-        tx.send(ProcessingEvent::FinishedFile(i)).unwrap();
+        tx.send(ProcessingEvent::FinishedFile(i))?;
     }
-    tx.send(ProcessingEvent::Done).unwrap();
+    tx.send(ProcessingEvent::Done)?;
 
     Ok(())
 }

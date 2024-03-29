@@ -29,7 +29,7 @@ pub struct App {
     #[serde(skip)]
     processing_rx: Option<crossbeam_channel::Receiver<crate::ProcessingEvent>>,
     #[serde(skip)]
-    last_event: Option<ProcessingEvent>,
+    messages: Vec<String>,
 }
 
 impl App {
@@ -88,27 +88,40 @@ impl eframe::App for App {
                 self.input_files.clear();
             }
 
-            if let Some(rx) = &self.processing_rx {
-                if let Some(event) = rx.try_recv().ok() {
-                    self.last_event = Some(event);
-                }
+            let button = if self.processing_rx.is_some() {
+                let _ = ui.button("Processing...");
+                false
+            } else {
+                ui.button("Process").clicked()
+            };
 
-                if let Some(event) = &self.last_event {
+            if let Some(rx) = &self.processing_rx {
+                let mut done = false;
+                while let Some(event) = rx.try_recv().ok() {
                     match event {
                         ProcessingEvent::FinishedFile(i) => {
-                            ui.label(format!("Finished file: {}", i));
+                            self.messages.push(format!("Finished file: {}", i));
+                        }
+                        ProcessingEvent::Warning(w) => {
+                            self.messages.push(format!("Warning: {}", w));
                         }
                         ProcessingEvent::Done => {
-                            ui.label("Done processing files");
-                            self.processing_rx = None;
+                            self.messages.push("Done processing files".to_owned());
+                            done = true;
+                            break;
+                        }
+                        ProcessingEvent::Failed => {
+                            self.messages.push("Error processing files".to_owned());
+                            done = true;
+                            break;
                         }
                     }
-                } else {
-                    ui.label("Processing");
                 }
 
-                //
-            } else if ui.button("Process").clicked() {
+                if done {
+                    self.processing_rx = None;
+                }
+            } else if button {
                 if let Some(output_folder) = &self.output_folder {
                     let (tx, rx) = crossbeam_channel::unbounded();
                     self.processing_rx = Some(rx);
@@ -126,6 +139,12 @@ impl eframe::App for App {
                     });
                 }
             }
+
+            ui.group(|ui| {
+                for msg in self.messages.iter() {
+                    ui.label(msg);
+                }
+            });
 
             //
         });
