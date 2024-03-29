@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{BufReader, Read, Write};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
@@ -120,6 +121,8 @@ pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
     let mut out = vec![];
     let mut md_ps = PSMetadata { object: vec![] };
 
+    let mut model_cache: HashMap<String, Model> = HashMap::new();
+
     if models.len() != 1 {
         warn!("expected 1 model, got {}", models.len());
     }
@@ -144,8 +147,8 @@ pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
         let xs = model
             .resources
             .object
-            .par_iter()
-            // .iter()
+            // .par_iter()
+            .iter()
             .map(|object| {
                 debug!("object[{}]", object.id);
 
@@ -210,13 +213,15 @@ pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
 
                             let sub_id = c.objectid;
 
-                            /// load the component model from the path
-                            let mut f = zip2.by_name(&path).unwrap();
-                            let mut s = String::new();
-                            f.read_to_string(&mut s).unwrap();
+                            /// check for cached model, or load the component model from the path
+                            let sub_model = model_cache.entry(path.to_string()).or_insert_with(|| {
+                                let mut f = zip2.by_name(&path).unwrap();
+                                let mut s = String::new();
+                                f.read_to_string(&mut s).unwrap();
 
-                            let mut de = Deserializer::from_str(&s);
-                            let sub_model = Model::deserialize(&mut de).unwrap();
+                                let mut de = Deserializer::from_str(&s);
+                                Model::deserialize(&mut de).unwrap()
+                            });
 
                             /// for each mesh, smoosh models together and record the offsets
                             ///
