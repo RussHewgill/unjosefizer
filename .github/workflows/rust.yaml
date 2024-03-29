@@ -11,9 +11,9 @@ jobs:
         platform:
           - os_name: Linux-x86_64
             os: ubuntu-20.04
-            target: x86_64-unknown-linux-musl
+            target: x86_64-unknown-linux-gnu
             bin: unjosefizer
-            name: UnJosefizer-Linux-x86_64-musl.tar.gz
+            name: UnJosefizer-Linux-x86_64-gnu.tar.gz
             command: build
 
           - os_name: macOS-x86_64
@@ -40,9 +40,9 @@ jobs:
     - run: rustup toolchain install stable --profile minimal
     - name: Cache cargo & target directories
       uses: Swatinem/rust-cache@v2
-    - name: Install musl-tools on Linux
-      run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools
-      if: contains(matrix.platform.name, 'musl')
+    - name: Install eframe deps on Linux
+      run: sudo apt-get update --yes && sudo apt-get install --yes libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
+      if: contains(matrix.platform.name, 'Linux')
     - name: Build
       uses: houseabsolute/actions-rust-cross@v0.0.12
       with:
