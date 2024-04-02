@@ -12,6 +12,7 @@ pub mod metadata;
 pub mod model;
 pub mod save_load;
 pub mod ui;
+pub mod utils;
 
 use std::{f32::consts::E, time::Duration};
 
@@ -21,7 +22,7 @@ use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     logging::init_logs,
-    save_load::{debug_models, load_3mf_orca, load_3mf_ps, save_ps_3mf},
+    save_load::{debug_models, load_3mf_orca, load_3mf_ps, save_ps_3mf, save_ps_generic},
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -96,6 +97,27 @@ pub fn process_files(input_files: &[std::path::PathBuf], output_folder: &std::pa
     Ok(())
 }
 
+#[cfg(feature = "nope")]
+pub fn test_main() -> Result<()> {
+    crate::logging::init_logs();
+
+    use nalgebra as na;
+    use crate::utils::*;
+
+    let x = 0.;
+    let y = 90.;
+    let z = 180.;
+
+    // let rot = na::Rotation3::from_euler_angles(deg_to_rad(x), deg_to_rad(y), deg_to_rad(z));
+    // print_matrix3(rot.matrix());
+
+    let m = na::Translation3::new(1., 2., 3.);
+
+    print_matrix!(&m.to_homogeneous());
+
+    Ok(())
+}
+
 // #[cfg(feature = "nope")]
 pub fn test_main() -> Result<()> {
     crate::logging::init_logs();
@@ -104,14 +126,20 @@ pub fn test_main() -> Result<()> {
     // let path_orca = "assets/test-orca.3mf";
     // let path_orca = "assets/test-orca2.3mf";
     // let path_orca = "assets/test-orca3.3mf";
-    let path_orca = "assets/test-gemstone-orca.3mf";
+    // let path_orca = "assets/test-gemstone-orca.3mf";
+    let path_orca = "assets/Merged.3mf";
+    // let path_orca = "assets/Merged_generic.3mf";
 
     let t0 = std::time::Instant::now();
 
     let (models_orca, md) = load_3mf_orca(path_orca).unwrap();
+    // let (models_orca, md) = load_3mf_ps(path_orca).unwrap();
     let t1 = std::time::Instant::now();
 
-    save_ps_3mf(&models_orca, Some(&md), "assets/test-ps-out.3mf").unwrap();
+    // save_ps_generic(&models_orca, md.as_ref(), "assets/Merged_generic_ps.3mf").unwrap();
+    save_ps_3mf(&models_orca, Some(&md), "assets/Merged_ps.3mf").unwrap();
+
+    // save_ps_3mf(&models_orca, Some(&md), "assets/test-ps-out.3mf").unwrap();
     let t2 = std::time::Instant::now();
 
     eprintln!("done");

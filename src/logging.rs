@@ -40,7 +40,8 @@ pub fn init_logs() {
         .with_line_number(true)
         .with_target(false)
         .compact()
-        .with_filter(tracing_subscriber::filter::EnvFilter::new("info,unjosefizer=debug,eframe=warn"));
+        // .with_filter(tracing_subscriber::filter::EnvFilter::new("info,unjosefizer=debug,eframe=warn"))
+        ;
 
     let subscriber = tracing_subscriber::registry()
         .with(file_layer)

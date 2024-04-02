@@ -4,11 +4,11 @@
 #![allow(dead_code)]
 #![allow(unused_doc_comments)]
 #![allow(unused_labels)]
-#![windows_subsystem = "windows"]
+// #![windows_subsystem = "windows"]
 
 use unjosefizer_lib::{logging::init_logs, *};
 
 fn main() {
-    // test_main().unwrap();
-    ui::run_eframe().unwrap();
+    test_main().unwrap();
+    // ui::run_eframe().unwrap();
 }

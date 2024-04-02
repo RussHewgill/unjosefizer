@@ -72,6 +72,72 @@ pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], metadata: Option
     Ok(())
 }
 
+pub fn save_ps_generic<P: AsRef<std::path::Path>>(models: &[Model], metadata: Option<&PSMetadata>, path: P) -> Result<()> {
+    let mut writer = std::fs::File::create(path)?;
+    let mut archive = ZipWriter::new(writer);
+
+    archive.start_file("[Content_Types].xml", FileOptions::default())?;
+    archive.write_all(include_bytes!("../templates/content_types.xml"))?;
+
+    archive.start_file("_rels/.rels", FileOptions::default())?;
+    archive.write_all(include_bytes!("../templates/rels.xml"))?;
+
+    let model = {
+        let mut model = models[0].clone();
+
+        for object in model.resources.object.iter_mut() {
+            match &mut object.object {
+                ObjectData::Mesh(mesh) => {
+                    for t in mesh.triangles.triangle.iter_mut() {
+                        if let Some(p) = t.mmu_orca.take() {
+                            t.mmu_ps = Some(p);
+                        }
+                    }
+                }
+                ObjectData::Components { component } => {
+                    bail!("Model contains components instead of mesh");
+                }
+            }
+        }
+
+        model
+    };
+
+    archive.start_file("3D/3dmodel.model", FileOptions::default())?;
+
+    let mut xml = String::new();
+
+    let mut ser = Serializer::with_root(&mut xml, Some("model"))?;
+    ser.indent(' ', 2);
+    model.serialize(ser)?;
+
+    // let xml = xml.replace("paint_color", "slic3rpe:mmu_segmentation");
+
+    let mut xml_writer = Writer::new_with_indent(&mut archive, b' ', 2);
+    xml_writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))?;
+    xml_writer.write_indent()?;
+    xml_writer.into_inner().write_all(xml.as_bytes())?;
+
+    if let Some(md) = metadata {
+        archive.start_file("Metadata/Slic3r_PE_model.config", FileOptions::default())?;
+
+        let mut xml = String::new();
+
+        let mut ser = Serializer::with_root(&mut xml, Some("config"))?;
+        ser.indent(' ', 2);
+        md.serialize(ser)?;
+
+        let mut xml_writer = Writer::new_with_indent(&mut archive, b' ', 2);
+        xml_writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))?;
+        xml_writer.write_indent()?;
+        xml_writer.into_inner().write_all(xml.as_bytes())?;
+    }
+
+    archive.finish()?;
+
+    Ok(())
+}
+
 /// In Prusa, each object is stored as a resource in a single model file with a mesh
 ///
 /// In Orca, each object has one or more components, with the attribute `p:path`
@@ -245,7 +311,7 @@ pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
 
                                     let transform_component = c.transform.unwrap();
 
-                                    m.apply_transform(&transform_md, &transform_component);
+                                    m.apply_transform(id, &transform_md, &transform_component);
 
                                     let offset = mesh.merge(&m);
 
@@ -277,21 +343,36 @@ pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
                                         });
                                     }
 
-                                    if let Some(matrix) = md_part
-                                        .metadata
-                                        .iter()
-                                        .find(|m| m.key.as_deref() == Some("matrix"))
-                                        .unwrap()
-                                        .value
-                                        .clone()
-                                    {
-                                        md_volume.metadata.push(ps::Metadata {
-                                            ty: "volume".to_string(),
-                                            key: Some("matrix".to_string()),
-                                            value: Some(matrix),
-                                        });
-                                    }
+                                    /// metadata matrix doesn't seem to be used by prusaslicer?
+                                    // let matrix = {
+                                    //     let mut m = String::new();
+                                    //     for v in new_trans.iter() {
+                                    //         m.push_str(&format!("{} ", v));
+                                    //     }
+                                    //     m.trim().to_string()
+                                    // };
 
+                                    // md_volume.metadata.push(ps::Metadata {
+                                    //     ty: "volume".to_string(),
+                                    //     key: Some("matrix".to_string()),
+                                    //     value: Some(matrix),
+                                    // });
+
+                                    // // #[cfg(feature = "nope")]
+                                    // if let Some(matrix) = md_part
+                                    //     .metadata
+                                    //     .iter()
+                                    //     .find(|m| m.key.as_deref() == Some("matrix"))
+                                    //     .unwrap()
+                                    //     .value
+                                    //     .clone()
+                                    // {
+                                    //     md_volume.metadata.push(ps::Metadata {
+                                    //         ty: "volume".to_string(),
+                                    //         key: Some("matrix".to_string()),
+                                    //         value: Some(matrix),
+                                    //     });
+                                    // }
                                     ps_md.volume.push(md_volume);
 
                                     prev_id = mesh.triangles.triangle.len();
