@@ -78,11 +78,11 @@ impl Mesh {
             }
         }
 
-        /// not sure what the translation values in m0 are for
-        let mut m = m;
-        m[(0, 3)] = m1[(0, 3)];
-        m[(1, 3)] = m1[(1, 3)];
-        m[(2, 3)] = m1[(2, 3)];
+        // /// not sure what the translation values in m0 are for
+        // let mut m = m;
+        // m[(0, 3)] = m1[(0, 3)];
+        // m[(1, 3)] = m1[(1, 3)];
+        // m[(2, 3)] = m1[(2, 3)];
 
         for v in self.vertices.vertex.iter_mut() {
             let v2 = nalgebra::Point3::new(v.x, v.y, v.z);
