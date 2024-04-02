@@ -137,8 +137,8 @@ pub fn test_main() -> Result<()> {
     let t1 = std::time::Instant::now();
 
     // save_ps_generic(&models_orca, md.as_ref(), "assets/Merged_generic_ps.3mf").unwrap();
-    save_ps_3mf(&models_orca, Some(&md), "assets/Merged_ps.3mf").unwrap();
 
+    save_ps_3mf(&models_orca, Some(&md), "assets/Merged_ps.3mf").unwrap();
     // save_ps_3mf(&models_orca, Some(&md), "assets/test-ps-out.3mf").unwrap();
     let t2 = std::time::Instant::now();
 
