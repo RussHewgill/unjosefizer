@@ -145,9 +145,10 @@ impl eframe::App for App {
                     let inputs = self.input_files.clone();
                     let output_folder = output_folder.clone();
 
+                    let ctx2 = ctx.clone();
                     self.start_time = Some(Instant::now());
                     std::thread::spawn(move || {
-                        match crate::process_files(&inputs, &output_folder, tx) {
+                        match crate::process_files(&inputs, &output_folder, tx, ctx2) {
                             Ok(_) => {}
                             Err(e) => {
                                 error!("Error processing files: {:?}", e);
