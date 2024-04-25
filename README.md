@@ -2,6 +2,18 @@
 
 Unjosefizer is a Rust application that will load a `.3mf` file saved by Bambu Studio/Orca Slicer, and convert it to a `.3mf` that can be read by Prusaslicer, while maintaining the MMU painting.
 
+## Update v0.2
+
+Prusaslicer has since added this function, so I decided to do something else that they can't:
+
+### Splitting models without losing the painting
+
+- to do this, use Prusaslicer to save a 3mf containing two copies of the model:
+  - One painted, that isn't split
+  - One split, with no painting
+- Load the file and process it under the "Splitting" tab
+- The newly created file will contain the split model with the paint copied over
+
 ## Caveats
 
 - **Do not use on files you haven't backed up!**
