@@ -7,6 +7,12 @@ pub mod ps_metadata {
         pub object: Vec<Object>,
     }
 
+    impl PSMetadata {
+        pub fn get_object_by_id(&self, id: usize) -> Option<&Object> {
+            self.object.iter().find(|o| o.id == id)
+        }
+    }
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(rename_all = "lowercase")]
     pub struct Object {
@@ -19,6 +25,16 @@ pub mod ps_metadata {
         // #[serde(rename = "@metadata")]
         pub metadata: Vec<Metadata>,
         pub volume: Vec<Volume>,
+    }
+
+    impl Object {
+        pub fn get_name(&self) -> Option<String> {
+            self.metadata
+                .iter()
+                .find(|m| m.key == Some("name".to_string()))
+                .map(|m| m.value.clone())
+                .flatten()
+        }
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]

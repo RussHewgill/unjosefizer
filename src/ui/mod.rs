@@ -28,6 +28,7 @@ pub struct App {
     current_tab: Tab,
     input_files_splitting: Vec<PathBuf>,
     input_files_conversion: Vec<PathBuf>,
+    input_files_instancing: Vec<PathBuf>,
     output_folder: Option<PathBuf>,
     #[serde(skip)]
     processing_rx: Option<crossbeam_channel::Receiver<crate::ProcessingEvent>>,
@@ -42,6 +43,7 @@ impl App {
         match self.current_tab {
             Tab::Conversion => &self.input_files_conversion,
             Tab::Splitting => &self.input_files_splitting,
+            Tab::InstancePaint => &self.input_files_instancing,
         }
     }
 
@@ -49,6 +51,7 @@ impl App {
         match self.current_tab {
             Tab::Conversion => &mut self.input_files_conversion,
             Tab::Splitting => &mut self.input_files_splitting,
+            Tab::InstancePaint => &mut self.input_files_instancing,
         }
     }
 }
@@ -57,6 +60,7 @@ impl App {
 pub enum Tab {
     Conversion,
     Splitting,
+    InstancePaint,
 }
 
 impl Default for Tab {
@@ -84,6 +88,7 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.current_tab, Tab::Splitting, "Splitting");
                 ui.selectable_value(&mut self.current_tab, Tab::Conversion, "Conversion");
+                ui.selectable_value(&mut self.current_tab, Tab::InstancePaint, "Paint Instancing");
             });
             // ui.separator();
         });
@@ -131,6 +136,7 @@ impl eframe::App for App {
             match self.current_tab {
                 Tab::Conversion => self.show_conversion(ctx, ui),
                 Tab::Splitting => self.show_splitting(ctx, ui),
+                Tab::InstancePaint => self.show_instancing(ctx, ui),
             }
         });
 
@@ -141,10 +147,12 @@ impl eframe::App for App {
             if !i.raw.dropped_files.is_empty() {
                 for file in &i.raw.dropped_files {
                     if let Some(path) = &file.path {
-                        match self.current_tab {
-                            Tab::Conversion => self.input_files_conversion.push(path.clone()),
-                            Tab::Splitting => self.input_files_splitting.push(path.clone()),
-                        }
+                        // match self.current_tab {
+                        //     // Tab::Conversion => self.input_files_conversion.push(path.clone()),
+                        //     // Tab::Splitting => self.input_files_splitting.push(path.clone()),
+                        //     // Tab::InstancePaint => self.input_files_instancing.push(path.clone()),
+                        // }
+                        self.current_input_files_mut().push(path.clone());
                     }
                 }
             }
@@ -228,6 +236,10 @@ impl App {
                 ui.label(msg);
             }
         });
+    }
+
+    fn show_instancing(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        //
     }
 
     fn show_conversion(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {

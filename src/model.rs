@@ -67,6 +67,22 @@ pub enum ObjectData {
     Components { component: Vec<Component> },
 }
 
+impl ObjectData {
+    pub fn get_mesh(&self) -> Option<&Mesh> {
+        match self {
+            ObjectData::Mesh(mesh) => Some(mesh),
+            _ => None,
+        }
+    }
+
+    pub fn get_mesh_mut(&mut self) -> Option<&mut Mesh> {
+        match self {
+            ObjectData::Mesh(mesh) => Some(mesh),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Component {
     #[serde(rename = "@objectid")]
@@ -83,6 +99,12 @@ pub struct Build {
     pub item: Vec<Item>,
 }
 
+impl Build {
+    pub fn get_item_by_id(&self, id: usize) -> Option<&Item> {
+        self.item.iter().find(|i| i.objectid == id)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
     #[serde(rename = "@objectid")]
@@ -91,6 +113,12 @@ pub struct Item {
     pub transform: Option<[f64; 12]>,
     #[serde(rename = "@partnumber", skip_serializing_if = "Option::is_none")]
     pub partnumber: Option<String>,
+}
+
+impl Item {
+    pub fn get_xyz(&self) -> Option<[f64; 3]> {
+        self.transform.map(|t| [t[9], t[10], t[11]])
+    }
 }
 
 impl Default for Model {

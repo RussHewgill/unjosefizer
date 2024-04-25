@@ -5,6 +5,7 @@
 #![allow(unused_doc_comments)]
 #![allow(unused_labels)]
 
+pub mod instancing;
 pub mod logging;
 pub mod mesh;
 pub mod metadata;
@@ -247,6 +248,59 @@ pub fn test_main() -> Result<()> {
     Ok(())
 }
 
+/// instancing test
+pub fn test_main() -> Result<()> {
+    crate::logging::init_logs();
+
+    info!("splitting test");
+
+    let path = "assets/instance_test.3mf";
+
+    let t0 = std::time::Instant::now();
+    let (mut models, md) = load_3mf_orca(path).unwrap();
+    let t1 = std::time::Instant::now();
+
+    // let model = &mut models[0];
+
+    let num_objects = models[0].resources.object.len();
+    debug!("num_objects: {}", num_objects);
+
+    for (i, ob) in models[0].resources.object.iter().enumerate() {
+        let name = md.object.iter().find(|o| o.id == ob.id).unwrap().get_name().unwrap();
+        // let name = ob.name.as_ref().unwrap();
+        debug!("object[{}]: {}", i, name);
+
+        let transform = &models[0].build.get_item_by_id(ob.id).unwrap().get_xyz().unwrap();
+
+        debug!("transform: {:?}", transform);
+
+        // debug!("painted: {}", ob.object.get_mesh().unwrap().is_painted());
+    }
+
+    /// cube 1
+    let from = 0;
+
+    let from_mesh = models[0].resources.object[from].object.get_mesh().unwrap().clone();
+
+    for i in 0..num_objects {
+        if i == from {
+            continue;
+        }
+
+        let to = models[0].resources.object[i].object.get_mesh_mut().unwrap();
+
+        crate::instancing::copy_paint(&from_mesh, to).unwrap();
+
+        //
+    }
+
+    save_ps_3mf(&models, Some(&md), "assets/instancing_test_out.3mf").unwrap();
+
+    Ok(())
+}
+
+/// splitting test
+#[cfg(feature = "nope")]
 pub fn test_main() -> Result<()> {
     crate::logging::init_logs();
 
@@ -290,6 +344,7 @@ pub fn test_main() -> Result<()> {
     Ok(())
 }
 
+/// paint conversion test
 #[cfg(feature = "nope")]
 pub fn test_main() -> Result<()> {
     crate::logging::init_logs();
