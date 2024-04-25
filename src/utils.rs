@@ -5,6 +5,7 @@ pub fn deg_to_rad(deg: f64) -> f64 {
     deg * std::f64::consts::PI / 180.
 }
 
+#[allow(unused_macros)]
 macro_rules! print_matrix {
     ($m:expr) => {
         for row in $m.row_iter() {

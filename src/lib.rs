@@ -11,6 +11,7 @@ pub mod metadata;
 pub mod model;
 pub mod paint_sharing;
 pub mod save_load;
+pub mod splitting;
 pub mod ui;
 pub mod utils;
 
@@ -139,7 +140,50 @@ pub fn test_main() -> Result<()> {
     Ok(())
 }
 
-// #[cfg(feature = "nope")]
+pub fn test_main() -> Result<()> {
+    crate::logging::init_logs();
+
+    info!("splitting test");
+
+    // let path = "assets/split_test_ps.3mf";
+    let path = "assets/test_sunflower.3mf";
+    // let path = "assets/split_test_crystal.3mf";
+
+    let t0 = std::time::Instant::now();
+    let (models, md) = load_3mf_ps(path).unwrap();
+    let t1 = std::time::Instant::now();
+
+    let dur_load = t1 - t0;
+    debug!("load time: {:?}", (dur_load.as_secs_f64() * 1e3).round() / 1e3);
+
+    use crate::splitting::SplitModel;
+
+    let split0 = SplitModel::from_object(&models[0].resources.object[0]);
+
+    let mut split1 = SplitModel::from_object(&models[0].resources.object[1]);
+
+    let t2 = std::time::Instant::now();
+    crate::splitting::convert_paint(split0, &mut split1);
+    let t3 = std::time::Instant::now();
+
+    debug!("convert time: {:?}", ((t3 - t2).as_secs_f64() * 1e3).round() / 1e3);
+
+    let mut models2 = models.clone();
+
+    split1.update_object(&mut models2[0].resources.object[1]);
+    let t4 = std::time::Instant::now();
+    debug!("update time: {:?}", ((t4 - t3).as_secs_f64() * 1e3).round() / 1e3);
+
+    save_ps_3mf(&models2, md.as_ref(), "assets/split_ps_out.3mf").unwrap();
+    let t5 = std::time::Instant::now();
+
+    let dur_save = t5 - t4;
+    debug!("save time: {:?}", (dur_save.as_secs_f64() * 1e3).round() / 1e3);
+
+    Ok(())
+}
+
+#[cfg(feature = "nope")]
 pub fn test_main() -> Result<()> {
     crate::logging::init_logs();
 

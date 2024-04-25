@@ -427,7 +427,7 @@ pub fn load_3mf_ps<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, Op
             let mut de = Deserializer::from_reader(BufReader::new(file));
 
             let m = PSMetadata::deserialize(&mut de)?;
-            debug!("metadata: {:?}", m);
+            // debug!("metadata: {:?}", m);
 
             md = Some(m);
         }

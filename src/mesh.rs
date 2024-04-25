@@ -115,23 +115,22 @@ impl Mesh {
         // ];
         // let m0 = nalgebra::Matrix4::from_row_slice(&transform_md);
 
-        // let m1 = mat_model.transpose() + mat_md;
-        // let m1 = mat_md.append_translation(&mat_model.row(3).clone_owned().transpose());
-        if id == 23 {
-            debug!("mat_md");
-            print_matrix!(&mat_md);
-            debug!("mat_model");
-            print_matrix!(&mat_model);
-            // debug!("m1");
-            // print_matrix4(&m1);
-        }
+        // // let m1 = mat_model.transpose() + mat_md;
+        // // let m1 = mat_md.append_translation(&mat_model.row(3).clone_owned().transpose());
+        // if id == 23 {
+        //     debug!("mat_md");
+        //     print_matrix!(&mat_md);
+        //     debug!("mat_model");
+        //     print_matrix!(&mat_model);
+        //     // debug!("m1");
+        //     // print_matrix4(&m1);
+        // }
 
         // /// right positions, but spread out x2 and not rotated
         // let m = mat_model * mat_md;
 
         // /// right positions, but spread out and not rotated
         // let m = mat_md;
-
         let m = mat_model;
 
         // let m = m.try_inverse().unwrap();
