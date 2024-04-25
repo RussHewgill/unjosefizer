@@ -25,7 +25,9 @@ pub fn run_eframe() -> eframe::Result<()> {
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
-    input_files: Vec<PathBuf>,
+    current_tab: Tab,
+    input_files_splitting: Vec<PathBuf>,
+    input_files_conversion: Vec<PathBuf>,
     output_folder: Option<PathBuf>,
     #[serde(skip)]
     processing_rx: Option<crossbeam_channel::Receiver<crate::ProcessingEvent>>,
@@ -33,6 +35,34 @@ pub struct App {
     messages: Vec<String>,
     #[serde(skip)]
     start_time: Option<Instant>,
+}
+
+impl App {
+    pub fn current_input_files(&self) -> &Vec<PathBuf> {
+        match self.current_tab {
+            Tab::Conversion => &self.input_files_conversion,
+            Tab::Splitting => &self.input_files_splitting,
+        }
+    }
+
+    pub fn current_input_files_mut(&mut self) -> &mut Vec<PathBuf> {
+        match self.current_tab {
+            Tab::Conversion => &mut self.input_files_conversion,
+            Tab::Splitting => &mut self.input_files_splitting,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub enum Tab {
+    Conversion,
+    Splitting,
+}
+
+impl Default for Tab {
+    fn default() -> Self {
+        Self::Splitting
+    }
 }
 
 impl App {
@@ -50,6 +80,14 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::top("tab_bar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut self.current_tab, Tab::Splitting, "Splitting");
+                ui.selectable_value(&mut self.current_tab, Tab::Conversion, "Conversion");
+            });
+            // ui.separator();
+        });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Choose output folder..").clicked() {
@@ -66,14 +104,14 @@ impl eframe::App for App {
             if ui.button("Add file...").clicked() {
                 let mut picker = rfd::FileDialog::new().add_filter("filter", &["3mf"]);
                 if let Some(path) = picker.pick_file() {
-                    self.input_files.push(path);
+                    self.current_input_files_mut().push(path);
                 }
             }
 
             ui.label("Input files:");
             ui.group(|ui| {
                 let mut to_remove = vec![];
-                for (i, path) in self.input_files.iter().enumerate() {
+                for (i, path) in self.current_input_files().iter().enumerate() {
                     ui.horizontal(|ui| {
                         ui.monospace(format!("{: >2}: {}", i + 1, path.display()));
                         if ui.button("Remove").clicked() {
@@ -82,90 +120,18 @@ impl eframe::App for App {
                     });
                 }
                 for path in to_remove.into_iter() {
-                    self.input_files.retain(|p| p != &path);
+                    self.current_input_files_mut().retain(|p| p != &path);
                 }
             });
 
             if ui.button("Clear all").clicked() {
-                self.input_files.clear();
+                self.current_input_files_mut().clear();
             }
 
-            let button = if self.processing_rx.is_some() {
-                let _ = ui.button("Processing...");
-                false
-            } else {
-                ui.button("Process").clicked()
-            };
-
-            if let Some(rx) = &self.processing_rx {
-                let mut done = false;
-                while let Some(event) = rx.try_recv().ok() {
-                    match event {
-                        ProcessingEvent::StartedFile(i) => {
-                            self.messages.push(format!("Started file: {}", i + 1));
-                        }
-                        ProcessingEvent::LoadedFile(i, dt) => {
-                            let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
-                            info!("{}", m);
-                            self.messages.push(format!("Loaded file: {} in {:.1}s", i + 1, dt.as_secs_f64()));
-                        }
-                        ProcessingEvent::FinishedFile(i, dt) => {
-                            let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
-                            info!("{}", m);
-                            self.messages.push(m);
-                        }
-                        ProcessingEvent::Warning(w) => {
-                            self.messages.push(format!("Warning: {}", w));
-                        }
-                        ProcessingEvent::Done => {
-                            let elapsed = self.start_time.unwrap().elapsed();
-                            self.messages
-                                .push(format!("Done processing files in {:.1}s", elapsed.as_secs_f64()));
-                            done = true;
-                            break;
-                        }
-                        ProcessingEvent::Failed => {
-                            let elapsed = self.start_time.unwrap().elapsed();
-                            self.messages
-                                .push(format!("Error processing files in {:.1}s", elapsed.as_secs_f64()));
-                            done = true;
-                            break;
-                        }
-                    }
-                }
-
-                if done {
-                    self.processing_rx = None;
-                    self.start_time = None;
-                }
-            } else if button {
-                if let Some(output_folder) = &self.output_folder {
-                    let (tx, rx) = crossbeam_channel::unbounded();
-                    self.processing_rx = Some(rx);
-                    let inputs = self.input_files.clone();
-                    let output_folder = output_folder.clone();
-
-                    let ctx2 = ctx.clone();
-                    self.start_time = Some(Instant::now());
-                    std::thread::spawn(move || {
-                        match crate::process_files(&inputs, &output_folder, tx, ctx2) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!("Error processing files: {:?}", e);
-                            }
-                        }
-                        //
-                    });
-                }
+            match self.current_tab {
+                Tab::Conversion => self.show_conversion(ctx, ui),
+                Tab::Splitting => self.show_splitting(ctx, ui),
             }
-
-            ui.group(|ui| {
-                for msg in self.messages.iter() {
-                    ui.label(msg);
-                }
-            });
-
-            //
         });
 
         preview_files_being_dropped(ctx);
@@ -175,11 +141,172 @@ impl eframe::App for App {
             if !i.raw.dropped_files.is_empty() {
                 for file in &i.raw.dropped_files {
                     if let Some(path) = &file.path {
-                        self.input_files.push(path.clone());
+                        match self.current_tab {
+                            Tab::Conversion => self.input_files_conversion.push(path.clone()),
+                            Tab::Splitting => self.input_files_splitting.push(path.clone()),
+                        }
                     }
                 }
             }
         });
+    }
+}
+
+impl App {
+    fn show_splitting(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        let button = if self.processing_rx.is_some() {
+            let _ = ui.button("Processing...");
+            false
+        } else {
+            ui.button("Process").clicked()
+        };
+
+        if let Some(rx) = &self.processing_rx {
+            let mut done = false;
+            while let Some(event) = rx.try_recv().ok() {
+                match event {
+                    ProcessingEvent::StartedFile(i) => {
+                        self.messages.push(format!("Started file: {}", i + 1));
+                    }
+                    ProcessingEvent::LoadedFile(i, dt) => {
+                        let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
+                        info!("{}", m);
+                        self.messages.push(format!("Loaded file: {} in {:.1}s", i + 1, dt.as_secs_f64()));
+                    }
+                    ProcessingEvent::FinishedFile(i, dt) => {
+                        let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
+                        info!("{}", m);
+                        self.messages.push(m);
+                    }
+                    ProcessingEvent::Warning(w) => {
+                        self.messages.push(format!("Warning: {}", w));
+                    }
+                    ProcessingEvent::Done => {
+                        let elapsed = self.start_time.unwrap().elapsed();
+                        self.messages
+                            .push(format!("Done processing files in {:.1}s", elapsed.as_secs_f64()));
+                        done = true;
+                        break;
+                    }
+                    ProcessingEvent::Failed => {
+                        let elapsed = self.start_time.unwrap().elapsed();
+                        self.messages
+                            .push(format!("Error processing files in {:.1}s", elapsed.as_secs_f64()));
+                        done = true;
+                        break;
+                    }
+                }
+            }
+
+            if done {
+                self.processing_rx = None;
+                self.start_time = None;
+            }
+        } else if button {
+            if let Some(output_folder) = &self.output_folder {
+                let (tx, rx) = crossbeam_channel::unbounded();
+                self.processing_rx = Some(rx);
+                let inputs = self.input_files_splitting.clone();
+                let output_folder = output_folder.clone();
+
+                let ctx2 = ctx.clone();
+                self.start_time = Some(Instant::now());
+                std::thread::spawn(move || {
+                    match crate::process_files_splitting(&inputs, &output_folder, tx, ctx2) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("Error processing files: {:?}", e);
+                        }
+                    }
+                    //
+                });
+            }
+        }
+
+        ui.group(|ui| {
+            for msg in self.messages.iter() {
+                ui.label(msg);
+            }
+        });
+    }
+
+    fn show_conversion(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        let button = if self.processing_rx.is_some() {
+            let _ = ui.button("Processing...");
+            false
+        } else {
+            ui.button("Process").clicked()
+        };
+
+        if let Some(rx) = &self.processing_rx {
+            let mut done = false;
+            while let Some(event) = rx.try_recv().ok() {
+                match event {
+                    ProcessingEvent::StartedFile(i) => {
+                        self.messages.push(format!("Started file: {}", i + 1));
+                    }
+                    ProcessingEvent::LoadedFile(i, dt) => {
+                        let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
+                        info!("{}", m);
+                        self.messages.push(format!("Loaded file: {} in {:.1}s", i + 1, dt.as_secs_f64()));
+                    }
+                    ProcessingEvent::FinishedFile(i, dt) => {
+                        let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
+                        info!("{}", m);
+                        self.messages.push(m);
+                    }
+                    ProcessingEvent::Warning(w) => {
+                        self.messages.push(format!("Warning: {}", w));
+                    }
+                    ProcessingEvent::Done => {
+                        let elapsed = self.start_time.unwrap().elapsed();
+                        self.messages
+                            .push(format!("Done processing files in {:.1}s", elapsed.as_secs_f64()));
+                        done = true;
+                        break;
+                    }
+                    ProcessingEvent::Failed => {
+                        let elapsed = self.start_time.unwrap().elapsed();
+                        self.messages
+                            .push(format!("Error processing files in {:.1}s", elapsed.as_secs_f64()));
+                        done = true;
+                        break;
+                    }
+                }
+            }
+
+            if done {
+                self.processing_rx = None;
+                self.start_time = None;
+            }
+        } else if button {
+            if let Some(output_folder) = &self.output_folder {
+                let (tx, rx) = crossbeam_channel::unbounded();
+                self.processing_rx = Some(rx);
+                let inputs = self.input_files_conversion.clone();
+                let output_folder = output_folder.clone();
+
+                let ctx2 = ctx.clone();
+                self.start_time = Some(Instant::now());
+                std::thread::spawn(move || {
+                    match crate::process_files_conversion(&inputs, &output_folder, tx, ctx2) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("Error processing files: {:?}", e);
+                        }
+                    }
+                    //
+                });
+            }
+        }
+
+        ui.group(|ui| {
+            for msg in self.messages.iter() {
+                ui.label(msg);
+            }
+        });
+
+        //
     }
 }
 

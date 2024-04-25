@@ -24,6 +24,7 @@ use tracing::{debug, error, info, trace, warn};
 use crate::{
     logging::init_logs,
     save_load::{debug_models, load_3mf_orca, load_3mf_ps, save_ps_3mf, save_ps_generic},
+    splitting::SplitModel,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -49,7 +50,7 @@ impl EventSender {
     }
 }
 
-pub fn process_files(
+pub fn process_files_conversion(
     input_files: &[std::path::PathBuf],
     output_folder: &std::path::PathBuf,
     tx: Sender<ProcessingEvent>,
@@ -114,6 +115,112 @@ pub fn process_files(
             }
         }
     }
+    sender.send(ProcessingEvent::Done)?;
+
+    Ok(())
+}
+
+pub fn process_files_splitting(
+    input_files: &[std::path::PathBuf],
+    output_folder: &std::path::PathBuf,
+    tx: Sender<ProcessingEvent>,
+    ctx: egui::Context,
+) -> Result<()> {
+    if !output_folder.is_dir() {
+        error!("Invalid output folder: {:?}", output_folder);
+        tx.send(ProcessingEvent::Failed)?;
+        return Ok(());
+    }
+
+    let sender = EventSender { tx, ctx };
+    let tx = ();
+
+    for (i, path) in input_files.iter().enumerate() {
+        info!("Processing: {:?}", path);
+        info!("output_folder: {:?}", output_folder);
+
+        let Some(path2) = &path.to_str() else {
+            warn!("Invalid path: {:?}", path);
+            sender.send(ProcessingEvent::Warning(format!("Invalid path: {:?}", path)))?;
+            continue;
+        };
+        let t0 = std::time::Instant::now();
+        // let loaded = crate::save_load::load_3mf_orca(&path2);
+        let loaded = crate::save_load::load_3mf_ps(&path2);
+        let t1 = std::time::Instant::now();
+
+        match loaded {
+            Ok((models, md)) => {
+                sender.send(ProcessingEvent::LoadedFile(i, t0.elapsed()))?;
+
+                let Some(file_name) = path.file_name() else {
+                    warn!("Invalid file name: {:?}", path);
+                    sender.send(ProcessingEvent::Warning(format!("Invalid file name: {:?}", path)))?;
+                    continue;
+                };
+                let Some(file_name) = file_name.to_str() else {
+                    warn!("Invalid file name: {:?}", path);
+                    sender.send(ProcessingEvent::Warning(format!("Invalid file name: {:?}", path)))?;
+                    continue;
+                };
+
+                let file_name = file_name.replace(".3mf", "");
+                let file_name = format!("{}_split_painted.3mf", file_name);
+
+                let output_file_path = output_folder.join(file_name);
+
+                if models[0].resources.object.len() != 2 {
+                    error!("Invalid number of objects: {}", models[0].resources.object.len());
+                    sender.send(ProcessingEvent::Warning(format!(
+                        "Invalid number of objects: {}",
+                        models[0].resources.object.len()
+                    )))?;
+                    continue;
+                }
+
+                let split0 = SplitModel::from_object(&models[0].resources.object[0]);
+                let split1 = SplitModel::from_object(&models[0].resources.object[1]);
+
+                let (painted, mut split) = match (split0.is_painted(), split1.is_painted()) {
+                    (true, false) => (split0, split1),
+                    (false, true) => (split1, split0),
+                    (true, true) => {
+                        error!("Model already painted");
+                        sender.send(ProcessingEvent::Warning(format!("Model already painted")))?;
+                        continue;
+                    }
+                    (false, false) => {
+                        error!("Neither model painted");
+                        sender.send(ProcessingEvent::Warning(format!("Neither model painted")))?;
+                        continue;
+                    }
+                };
+
+                let t2 = std::time::Instant::now();
+                crate::splitting::convert_paint(painted, &mut split);
+
+                let mut models2 = models.clone();
+
+                split.update_object(&mut models2[0].resources.object[1]);
+
+                match save_ps_3mf(&models2, md.as_ref(), output_file_path) {
+                    Ok(_) => {
+                        sender.send(ProcessingEvent::FinishedFile(i, t1.elapsed()))?;
+                    }
+                    Err(e) => {
+                        error!("Error saving 3mf: {:?}", e);
+                        sender.send(ProcessingEvent::Warning(format!("Error saving 3mf: {:?}", e)))?;
+                    }
+                }
+            }
+            Err(e) => {
+                let e = format!("Error loading 3mf: {:?}", e);
+                error!("{}", e);
+                sender.send(ProcessingEvent::Warning(e))?;
+            }
+        }
+    }
+
     sender.send(ProcessingEvent::Done)?;
 
     Ok(())
