@@ -7,6 +7,12 @@ use serde::{Deserialize, Serialize};
 pub struct Model {
     #[serde(rename = "@xmlns", default)]
     pub xmlns: String,
+    #[serde(rename = "@BambuStudio", default, skip_serializing_if = "String::is_empty")]
+    pub bambustudio: String,
+    #[serde(rename = "@ppp", default, skip_serializing_if = "String::is_empty")]
+    pub p: String,
+    #[serde(rename = "@requiredextensions", default, skip_serializing_if = "String::is_empty")]
+    pub requiredextensions: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metadata: Vec<Metadata>,
     pub resources: Resources,
@@ -52,6 +58,8 @@ pub struct Object {
     pub partnumber: Option<String>,
     #[serde(rename = "@name", skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(rename = "@UUID", skip_serializing_if = "Option::is_none")]
+    pub uuid: Option<String>,
     #[serde(rename = "@pid", skip_serializing_if = "Option::is_none")]
     pub pid: Option<usize>,
     #[serde(rename = "@type", skip_serializing_if = "Option::is_none")]
@@ -89,6 +97,8 @@ pub struct Component {
     pub objectid: usize,
     #[serde(rename = "@transform", skip_serializing_if = "Option::is_none")]
     pub transform: Option<[f64; 12]>,
+    #[serde(rename = "@UUID", skip_serializing_if = "Option::is_none")]
+    pub uuid: Option<String>,
     #[serde(rename = "@path", skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 }
@@ -125,6 +135,9 @@ impl Default for Model {
     fn default() -> Self {
         Self {
             xmlns: "http://schemas.microsoft.com/3dmanufacturing/core/2015/02".to_owned(),
+            bambustudio: String::new(),
+            p: String::new(),
+            requiredextensions: String::new(),
             metadata: Vec::new(),
             resources: Resources::default(),
             build: Build::default(),

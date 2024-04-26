@@ -10,6 +10,7 @@ pub mod logging;
 pub mod mesh;
 pub mod metadata;
 pub mod model;
+pub mod model_orca;
 pub mod paint_sharing;
 pub mod save_load;
 pub mod splitting;
@@ -24,7 +25,7 @@ use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     logging::init_logs,
-    save_load::{debug_models, load_3mf_orca, load_3mf_ps, save_ps_3mf, save_ps_generic},
+    save_load::{debug_models, load_3mf_orca, load_3mf_orca_noconvert, load_3mf_ps, save_orca_3mf, save_ps_3mf, save_ps_generic},
     splitting::SplitModel,
 };
 
@@ -248,7 +249,32 @@ pub fn test_main() -> Result<()> {
     Ok(())
 }
 
+/// orca noconvert test
+// #[cfg(feature = "nope")]
+pub fn test_main() -> Result<()> {
+    crate::logging::init_logs();
+
+    info!("orca noconvert test");
+
+    let path = "assets/instance_test.3mf";
+
+    let t0 = std::time::Instant::now();
+    // let (model, sub_models, md, slice_cfg) = load_3mf_orca_noconvert(path).unwrap();
+    let model = load_3mf_orca_noconvert(path).unwrap();
+    let t1 = std::time::Instant::now();
+
+    // debug!("slice_cfg: {:?}", slice_cfg);
+
+    let path_out = "assets/instance_test2.3mf";
+
+    // save_orca_3mf(path_out, &model, &sub_models, &md, &slice_cfg)?;
+    save_orca_3mf(path_out, &model)?;
+
+    Ok(())
+}
+
 /// instancing test
+#[cfg(feature = "nope")]
 pub fn test_main() -> Result<()> {
     crate::logging::init_logs();
 

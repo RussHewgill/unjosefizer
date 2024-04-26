@@ -21,6 +21,7 @@ use crate::metadata::orca_metadata::OrcaMetadata;
 use crate::metadata::ps_metadata as ps;
 use crate::metadata::ps_metadata::PSMetadata;
 use crate::model::*;
+use crate::model_orca::OrcaModel;
 use crate::{mesh::*, metadata};
 
 // #[cfg(feature = "nope")]
@@ -138,6 +139,82 @@ pub fn save_ps_generic<P: AsRef<std::path::Path>>(models: &[Model], metadata: Op
     Ok(())
 }
 
+/// MARK: save_orca_3mf
+pub fn save_orca_3mf(path: &str, model: &OrcaModel) -> Result<()> {
+    let mut writer = std::fs::File::create(path)?;
+    let mut archive = ZipWriter::new(writer);
+
+    archive.start_file("[Content_Types].xml", FileOptions::default())?;
+    archive.write_all(include_bytes!("../templates/content_types.xml"))?;
+
+    archive.start_file("_rels/.rels", FileOptions::default())?;
+    archive.write_all(include_bytes!("../templates/rels.xml"))?;
+
+    /// main model
+    {
+        archive.start_file("3D/3dmodel.model", FileOptions::default())?;
+
+        let mut xml = String::new();
+
+        let mut ser = Serializer::with_root(&mut xml, Some("model"))?;
+        ser.indent(' ', 2);
+        model.model.serialize(ser)?;
+
+        let xml = xml.replace("path=", "p:path=");
+        let xml = xml.replace("UUID=", "p:UUID=");
+
+        let mut xml_writer = Writer::new_with_indent(&mut archive, b' ', 2);
+        xml_writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))?;
+        xml_writer.write_indent()?;
+        xml_writer.into_inner().write_all(xml.as_bytes())?;
+    }
+
+    /// project settings
+    archive.start_file("Metadata/project_settings.config", FileOptions::default())?;
+    archive.write_all(model.slice_cfg.as_bytes())?;
+
+    archive.start_file("3D/_rels/3dmodel.model.rels", FileOptions::default())?;
+    archive.write_all(model.rels.as_bytes())?;
+
+    /// metadata
+    {
+        archive.start_file("Metadata/model_settings.config", FileOptions::default())?;
+
+        let mut xml = String::new();
+
+        let mut ser = Serializer::with_root(&mut xml, Some("config"))?;
+        ser.indent(' ', 2);
+        model.md.serialize(ser)?;
+
+        let mut xml_writer = Writer::new_with_indent(&mut archive, b' ', 2);
+        xml_writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))?;
+        xml_writer.write_indent()?;
+        xml_writer.into_inner().write_all(xml.as_bytes())?;
+    }
+
+    for (cpath, sub_model) in model.sub_models.iter() {
+        archive.start_file(cpath, FileOptions::default())?;
+
+        let mut xml = String::new();
+
+        let mut ser = Serializer::with_root(&mut xml, Some("model"))?;
+        ser.indent(' ', 2);
+        sub_model.serialize(ser)?;
+
+        let xml = xml.replace("BambuStudio=", "xmlns:BambuStudio=");
+        let xml = xml.replace("ppp=", "xmlns:p=");
+        let xml = xml.replace("UUID=", "p:UUID=");
+
+        let mut xml_writer = Writer::new_with_indent(&mut archive, b' ', 2);
+        xml_writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))?;
+        xml_writer.write_indent()?;
+        xml_writer.into_inner().write_all(xml.as_bytes())?;
+    }
+
+    Ok(())
+}
+
+/// MARK: load_3mf_orca
 /// In Prusa, each object is stored as a resource in a single model file with a mesh
 ///
 /// In Orca, each object has one or more components, with the attribute `p:path`
@@ -205,6 +282,7 @@ pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
             },
             build: model.build.clone(),
             unit: model.unit.clone(),
+            ..Default::default()
         };
 
         model2.metadata.push(Metadata {
@@ -400,6 +478,122 @@ pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
     Ok((out, md_ps))
 }
 
+/// MARK: load_3mf_orca_noconvert
+pub fn load_3mf_orca_noconvert(path: &str) -> Result<OrcaModel> {
+    let file = std::fs::read(path)?;
+    let mut reader = std::io::Cursor::new(&file);
+
+    let mut zip = ZipArchive::new(reader)?;
+    let mut models = vec![];
+    let mut md_orca = None;
+
+    let re_path = Regex::new(r"p:path")?;
+
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i)?;
+        if file.name().ends_with("3dmodel.model") {
+            // debug!("file.name() = {:?}", file.name());
+            /// strip namespaces from xml
+            let mut s = String::new();
+
+            file.read_to_string(&mut s)?;
+            let s2 = re_path.replace_all(&s, "path");
+
+            // let mut de = Deserializer::from_reader(BufReader::new(file));
+            let mut de = Deserializer::from_str(&s2);
+            // let mut de = Deserializer::from_reader(BufReader::new(file));
+            let model = Model::deserialize(&mut de)?;
+            models.push(model);
+        } else if file.name().ends_with("model_settings.config") {
+            // debug!("got metadata file");
+            let mut de = Deserializer::from_reader(BufReader::new(file));
+
+            let m = OrcaMetadata::deserialize(&mut de)?;
+            // debug!("metadata: {:#?}", m);
+
+            md_orca = Some(m);
+        }
+    }
+
+    let Some(model) = models.pop() else {
+        bail!("Model file not found, input file was probably not saved by Bambu or Orca");
+    };
+
+    let Some(md) = md_orca else {
+        bail!("Metadata file not found, input file was probably not saved by Bambu or Orca");
+    };
+
+    // let mut sub_models = vec![];
+
+    let mut sub_models: HashMap<String, Model> = HashMap::new();
+
+    let re_bambustudio = Regex::new(r"xmlns:BambuStudio")?;
+    let re_p = Regex::new(r"xmlns:p")?;
+    let re_uuid = Regex::new(r"p:UUID")?;
+
+    // let mut components: Vec<Vec<Component>> = vec![];
+    for ob in model.resources.object.iter() {
+        match &ob.object {
+            ObjectData::Components { component } => {
+                for comp in component.iter() {
+                    let cpath = comp.path.as_ref().unwrap();
+                    let cpath = &cpath[1..];
+
+                    if sub_models.contains_key(cpath) {
+                        continue;
+                    }
+
+                    /// check for cached model, or load the component model from the path
+                    let sub_model = sub_models.entry(cpath.to_string()).or_insert_with(|| {
+                        let mut f = zip.by_name(&cpath).unwrap();
+                        let mut s = String::new();
+                        f.read_to_string(&mut s).unwrap();
+
+                        let s = re_bambustudio.replace_all(&s, "BambuStudio");
+                        let s = re_p.replace_all(&s, "ppp");
+                        let s = re_uuid.replace_all(&s, "UUID");
+
+                        let mut de = Deserializer::from_str(&s);
+                        Model::deserialize(&mut de).unwrap()
+                    });
+
+                    // sub_models.push((cpath.to_string(), sub_model.clone()));
+                }
+
+                // components.push(component.clone());
+            }
+            _ => {
+                bail!("Expected components, got mesh");
+            }
+        }
+    }
+
+    let slice_cfg = {
+        let mut f = zip.by_name("Metadata/project_settings.config")?;
+        let mut s = String::new();
+        f.read_to_string(&mut s).unwrap();
+        s
+    };
+
+    let rels = {
+        let mut f = zip.by_name("3D/_rels/3dmodel.model.rels")?;
+        let mut s = String::new();
+        f.read_to_string(&mut s).unwrap();
+        s
+    };
+
+    // Ok((model, sub_models, md_orca, slice_config))
+    // unimplemented!()
+    Ok(OrcaModel {
+        model,
+        slice_cfg,
+        md,
+        sub_models,
+        rels,
+    })
+}
+
+/// MARK: load_3mf_ps
 pub fn load_3mf_ps<P: AsRef<std::path::Path>>(path: P) -> Result<(Vec<Model>, Option<PSMetadata>)> {
     let mut reader = std::fs::File::open(path)?;
 
