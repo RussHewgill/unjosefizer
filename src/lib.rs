@@ -260,10 +260,12 @@ pub fn test_main() -> Result<()> {
 
     let t0 = std::time::Instant::now();
     // let (model, sub_models, md, slice_cfg) = load_3mf_orca_noconvert(path).unwrap();
-    let model = load_3mf_orca_noconvert(path).unwrap();
+    let mut model = load_3mf_orca_noconvert(path).unwrap();
     let t1 = std::time::Instant::now();
 
     // debug!("slice_cfg: {:?}", slice_cfg);
+
+    model.copy_paint(0, 2).unwrap();
 
     let path_out = "assets/instance_test2.3mf";
 
@@ -315,7 +317,7 @@ pub fn test_main() -> Result<()> {
 
         let to = models[0].resources.object[i].object.get_mesh_mut().unwrap();
 
-        crate::instancing::copy_paint(&from_mesh, to).unwrap();
+        crate::instancing::copy_paint_mesh(&from_mesh, to).unwrap();
 
         //
     }

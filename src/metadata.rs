@@ -85,6 +85,12 @@ pub mod orca_metadata {
         pub assemble: Vec<Assemble>,
     }
 
+    impl OrcaMetadata {
+        pub fn get_object_by_id(&self, id: usize) -> Option<&Object> {
+            self.object.iter().find(|o| o.id == id)
+        }
+    }
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(rename_all = "lowercase")]
     pub struct Metadata {
@@ -102,6 +108,17 @@ pub mod orca_metadata {
         // #[serde(rename = "@metadata")]
         pub metadata: Vec<Metadata>,
         pub part: Vec<Part>,
+    }
+
+    impl Object {
+        pub fn get_name(&self) -> Option<String> {
+            let name = "name".to_string();
+            self.metadata
+                .iter()
+                .find(|m| m.key.as_ref() == Some(&name))
+                .map(|m| m.value.clone())
+                .flatten()
+        }
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]

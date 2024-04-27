@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::{BufReader, Read, Write};
+use std::path::Path;
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use tracing::{debug, error, info, trace, warn};
@@ -140,7 +141,7 @@ pub fn save_ps_generic<P: AsRef<std::path::Path>>(models: &[Model], metadata: Op
 }
 
 /// MARK: save_orca_3mf
-pub fn save_orca_3mf(path: &str, model: &OrcaModel) -> Result<()> {
+pub fn save_orca_3mf<P: AsRef<Path>>(path: P, model: &OrcaModel) -> Result<()> {
     let mut writer = std::fs::File::create(path)?;
     let mut archive = ZipWriter::new(writer);
 
@@ -479,7 +480,7 @@ pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
 }
 
 /// MARK: load_3mf_orca_noconvert
-pub fn load_3mf_orca_noconvert(path: &str) -> Result<OrcaModel> {
+pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
     let file = std::fs::read(path)?;
     let mut reader = std::io::Cursor::new(&file);
 
@@ -523,13 +524,13 @@ pub fn load_3mf_orca_noconvert(path: &str) -> Result<OrcaModel> {
         bail!("Metadata file not found, input file was probably not saved by Bambu or Orca");
     };
 
-    // let mut sub_models = vec![];
-
-    let mut sub_models: HashMap<String, Model> = HashMap::new();
-
     let re_bambustudio = Regex::new(r"xmlns:BambuStudio")?;
     let re_p = Regex::new(r"xmlns:p")?;
     let re_uuid = Regex::new(r"p:UUID")?;
+
+    let mut sub_models = vec![];
+    let mut sub_models_map: HashMap<String, Model> = HashMap::new();
+    let mut sub_model_ids = vec![];
 
     // let mut components: Vec<Vec<Component>> = vec![];
     for ob in model.resources.object.iter() {
@@ -539,12 +540,13 @@ pub fn load_3mf_orca_noconvert(path: &str) -> Result<OrcaModel> {
                     let cpath = comp.path.as_ref().unwrap();
                     let cpath = &cpath[1..];
 
-                    if sub_models.contains_key(cpath) {
+                    if sub_models_map.contains_key(cpath) {
+                        warn!("duplicate component path: {}", cpath);
                         continue;
                     }
 
                     /// check for cached model, or load the component model from the path
-                    let sub_model = sub_models.entry(cpath.to_string()).or_insert_with(|| {
+                    let sub_model = sub_models_map.entry(cpath.to_string()).or_insert_with(|| {
                         let mut f = zip.by_name(&cpath).unwrap();
                         let mut s = String::new();
                         f.read_to_string(&mut s).unwrap();
@@ -557,7 +559,9 @@ pub fn load_3mf_orca_noconvert(path: &str) -> Result<OrcaModel> {
                         Model::deserialize(&mut de).unwrap()
                     });
 
-                    // sub_models.push((cpath.to_string(), sub_model.clone()));
+                    sub_model_ids.push(cpath.to_string());
+
+                    sub_models.push((cpath.to_string(), sub_model.clone()));
                 }
 
                 // components.push(component.clone());
@@ -582,13 +586,59 @@ pub fn load_3mf_orca_noconvert(path: &str) -> Result<OrcaModel> {
         s
     };
 
+    let painted = {
+        let mut painted = HashMap::new();
+
+        for object in model.resources.object.iter() {
+            match &object.object {
+                ObjectData::Mesh(mesh) => {
+                    panic!("Expected components, got mesh");
+                }
+                ObjectData::Components { component } => {
+                    for c in component {
+                        let cpath = c.path.as_ref().unwrap();
+                        let cpath = &cpath[1..];
+
+                        let sub_model = sub_models_map.get(cpath).unwrap();
+
+                        for sub_model_object in sub_model.resources.object.iter() {
+                            let id = sub_model_object.id;
+                            if id != c.objectid {
+                                continue;
+                            }
+
+                            painted.insert(id, false);
+                            match &sub_model_object.object {
+                                ObjectData::Mesh(m) => {
+                                    'paint_loop: for t in m.triangles.triangle.iter() {
+                                        if let Some(p) = t.mmu_ps.as_ref() {
+                                            painted.insert(id, true);
+                                            break 'paint_loop;
+                                        }
+                                    }
+                                }
+                                ObjectData::Components { .. } => {
+                                    panic!("nested components instead of mesh?");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        painted
+    };
+
     // Ok((model, sub_models, md_orca, slice_config))
     // unimplemented!()
     Ok(OrcaModel {
         model,
         slice_cfg,
         md,
-        sub_models,
+        sub_models: sub_models_map,
+        sub_model_ids,
+        painted,
         rels,
     })
 }

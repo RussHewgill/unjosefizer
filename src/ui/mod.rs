@@ -1,4 +1,6 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
+use egui::ahash::HashSet;
+use egui_extras::{Column, TableBuilder};
 use tracing::{debug, error, info, trace, warn};
 
 use egui_file::FileDialog;
@@ -8,7 +10,7 @@ use std::{
     time::Instant,
 };
 
-use crate::ProcessingEvent;
+use crate::{model_orca::OrcaModel, ProcessingEvent};
 
 pub fn run_eframe() -> eframe::Result<()> {
     crate::logging::init_logs();
@@ -36,6 +38,18 @@ pub struct App {
     messages: Vec<String>,
     #[serde(skip)]
     start_time: Option<Instant>,
+    #[serde(skip)]
+    loaded_instance_file: Option<LoadedInstanceFile>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LoadedInstanceFile {
+    path: PathBuf,
+    orca_model: OrcaModel,
+    objects: Vec<(usize, String, bool)>,
+    from_object: Option<usize>,
+    // to_objects: HashMap<usize, bool>,
+    to_objects: Vec<bool>,
 }
 
 impl App {
@@ -65,7 +79,8 @@ pub enum Tab {
 
 impl Default for Tab {
     fn default() -> Self {
-        Self::Splitting
+        // Self::Splitting
+        Self::InstancePaint
     }
 }
 
@@ -93,70 +108,76 @@ impl eframe::App for App {
             // ui.separator();
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if ui.button("Choose output folder..").clicked() {
-                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        self.output_folder = Some(path);
-                    }
-                }
-
-                if let Some(path) = &self.output_folder {
-                    ui.monospace(path.display().to_string());
-                }
+        if self.current_tab == Tab::InstancePaint {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                self.show_instancing(ctx, ui);
             });
-
-            if ui.button("Add file...").clicked() {
-                let mut picker = rfd::FileDialog::new().add_filter("filter", &["3mf"]);
-                if let Some(path) = picker.pick_file() {
-                    self.current_input_files_mut().push(path);
-                }
-            }
-
-            ui.label("Input files:");
-            ui.group(|ui| {
-                let mut to_remove = vec![];
-                for (i, path) in self.current_input_files().iter().enumerate() {
-                    ui.horizontal(|ui| {
-                        ui.monospace(format!("{: >2}: {}", i + 1, path.display()));
-                        if ui.button("Remove").clicked() {
-                            to_remove.push(path.clone());
+        } else {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.button("Choose output folder..").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                            self.output_folder = Some(path);
                         }
-                    });
+                    }
+
+                    if let Some(path) = &self.output_folder {
+                        ui.monospace(path.display().to_string());
+                    }
+                });
+
+                if ui.button("Add file...").clicked() {
+                    let mut picker = rfd::FileDialog::new().add_filter("filter", &["3mf"]);
+                    if let Some(path) = picker.pick_file() {
+                        self.current_input_files_mut().push(path);
+                    }
                 }
-                for path in to_remove.into_iter() {
-                    self.current_input_files_mut().retain(|p| p != &path);
+
+                ui.label("Input files:");
+                ui.group(|ui| {
+                    let mut to_remove = vec![];
+                    for (i, path) in self.current_input_files().iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.monospace(format!("{: >2}: {}", i + 1, path.display()));
+                            if ui.button("Remove").clicked() {
+                                to_remove.push(path.clone());
+                            }
+                        });
+                    }
+                    for path in to_remove.into_iter() {
+                        self.current_input_files_mut().retain(|p| p != &path);
+                    }
+                });
+
+                if ui.button("Clear all").clicked() {
+                    self.current_input_files_mut().clear();
+                }
+
+                match self.current_tab {
+                    Tab::Conversion => self.show_conversion(ctx, ui),
+                    Tab::Splitting => self.show_splitting(ctx, ui),
+                    Tab::InstancePaint => self.show_instancing(ctx, ui),
                 }
             });
 
-            if ui.button("Clear all").clicked() {
-                self.current_input_files_mut().clear();
-            }
+            preview_files_being_dropped(ctx);
 
-            match self.current_tab {
-                Tab::Conversion => self.show_conversion(ctx, ui),
-                Tab::Splitting => self.show_splitting(ctx, ui),
-                Tab::InstancePaint => self.show_instancing(ctx, ui),
-            }
-        });
-
-        preview_files_being_dropped(ctx);
-
-        // Collect dropped files:
-        ctx.input(|i| {
-            if !i.raw.dropped_files.is_empty() {
-                for file in &i.raw.dropped_files {
-                    if let Some(path) = &file.path {
-                        // match self.current_tab {
-                        //     // Tab::Conversion => self.input_files_conversion.push(path.clone()),
-                        //     // Tab::Splitting => self.input_files_splitting.push(path.clone()),
-                        //     // Tab::InstancePaint => self.input_files_instancing.push(path.clone()),
-                        // }
-                        self.current_input_files_mut().push(path.clone());
+            // Collect dropped files:
+            ctx.input(|i| {
+                if !i.raw.dropped_files.is_empty() {
+                    for file in &i.raw.dropped_files {
+                        if let Some(path) = &file.path {
+                            // match self.current_tab {
+                            //     // Tab::Conversion => self.input_files_conversion.push(path.clone()),
+                            //     // Tab::Splitting => self.input_files_splitting.push(path.clone()),
+                            //     // Tab::InstancePaint => self.input_files_instancing.push(path.clone()),
+                            // }
+                            self.current_input_files_mut().push(path.clone());
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     }
 }
 
@@ -239,6 +260,167 @@ impl App {
     }
 
     fn show_instancing(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui.button("Choose output folder..").clicked() {
+                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                    self.output_folder = Some(path);
+                }
+            }
+
+            if let Some(path) = &self.output_folder {
+                ui.monospace(path.display().to_string());
+            }
+        });
+
+        if ui.button("Load file...").clicked() {
+            let mut picker = rfd::FileDialog::new().add_filter("filter", &["3mf"]);
+            if let Some(path) = picker.pick_file() {
+                self.current_input_files_mut().clear();
+                self.current_input_files_mut().push(path);
+            }
+        }
+
+        if let Some(path) = self.current_input_files().get(0) {
+            ui.monospace(path.display().to_string());
+        }
+
+        if let Some(path) = self.current_input_files().get(0) {
+            if ui.button("Load input file").clicked() {
+                std::fs::copy(path, format!("{}.bak", path.display())).unwrap();
+                let model = crate::save_load::load_3mf_orca_noconvert(path).unwrap();
+
+                let objects: Vec<_> = model
+                    .get_objects()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, ob)| {
+                        let name = model.md.get_object_by_id(ob.id).unwrap().get_name().unwrap();
+
+                        // let (_, sub_model) = model.sub_models.get(i).unwrap();
+                        let sub_id = &model.sub_model_ids[i];
+                        let sub_model = model.sub_models.get(sub_id).unwrap();
+
+                        let mut painted = false;
+                        'paint_loop: for ob2 in sub_model.resources.object.iter() {
+                            match &ob2.object {
+                                crate::model::ObjectData::Mesh(mesh) => {
+                                    // painted = true;
+                                    for t in mesh.triangles.triangle.iter() {
+                                        if t.mmu_orca.is_some() {
+                                            painted = true;
+                                            break 'paint_loop;
+                                        }
+                                    }
+                                    break;
+                                }
+                                _ => {}
+                            }
+                            // painted = true;
+                            break;
+                        }
+
+                        (i, name, painted)
+                    })
+                    .collect();
+
+                let to_objects = vec![false; objects.len()];
+
+                self.loaded_instance_file = Some(LoadedInstanceFile {
+                    path: path.clone(),
+                    orca_model: model,
+                    objects,
+                    from_object: None,
+                    to_objects,
+                });
+            }
+        }
+
+        if let Some(loaded) = self.loaded_instance_file.as_mut() {
+            ui.label("Loaded:");
+            ui.monospace(loaded.path.display().to_string());
+
+            ui.group(|ui| {
+                TableBuilder::new(ui)
+                    .striped(true)
+                    .column(Column::auto().at_least(20.))
+                    .column(Column::auto().at_least(20.))
+                    .column(Column::auto().at_least(250.))
+                    .column(Column::auto().at_least(20.))
+                    .header(20., |mut header| {
+                        header.col(|ui| {
+                            ui.label("From");
+                        });
+                        header.col(|ui| {
+                            ui.label("To");
+                        });
+                        header.col(|ui| {
+                            ui.label("Name");
+                        });
+                        header.col(|ui| {
+                            ui.label("Is painted");
+                        });
+                    })
+                    .body(|mut body| {
+                        for (id, selected) in loaded.to_objects.iter_mut().enumerate() {
+                            let painted = loaded.objects[id].2;
+
+                            body.row(20., |mut row| {
+                                row.col(|ui| {
+                                    ui.radio_value(&mut loaded.from_object, Some(id), "");
+                                });
+
+                                row.col(|ui| {
+                                    if Some(id) == loaded.from_object {
+                                        ui.set_enabled(false);
+                                        ui.add(egui::Checkbox::without_text(&mut false));
+                                    } else {
+                                        ui.add(egui::Checkbox::without_text(selected));
+                                    }
+                                });
+
+                                row.col(|ui| {
+                                    ui.label(loaded.objects[id].1.clone());
+                                });
+                                row.col(|ui| {
+                                    if painted {
+                                        ui.label("painted");
+                                    }
+                                });
+                            });
+                        }
+                    });
+            });
+
+            if let Some(from) = loaded.from_object {
+                if ui.button("Apply").clicked() {
+                    for (to, &b) in loaded.to_objects.iter().enumerate() {
+                        if b {
+                            loaded.orca_model.copy_paint(from, to).unwrap();
+                        }
+                    }
+
+                    let path = self.input_files_instancing[0].clone();
+
+                    let Some(file_name) = path.file_name() else {
+                        panic!("Invalid file name: {:?}", path);
+                    };
+                    let Some(file_name) = file_name.to_str() else {
+                        panic!("Invalid file name: {:?}", path);
+                    };
+
+                    let file_name = file_name.replace(".3mf", "");
+                    let file_name = format!("{}_instanced.3mf", file_name);
+
+                    let output_folder = self.output_folder.clone().unwrap();
+                    let output_file_path = output_folder.join(file_name);
+
+                    // debug!("Saving to: {:?}", output_file_path);
+
+                    crate::save_load::save_orca_3mf(&output_file_path, &loaded.orca_model).unwrap();
+                }
+            }
+        }
+
         //
     }
 
