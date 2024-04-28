@@ -308,6 +308,7 @@ impl App {
                                     }
                                 });
 
+                                /// parts
                                 row.col(|ui| {
                                     ui.label(&format!(
                                         "{}",
@@ -329,10 +330,21 @@ impl App {
             });
 
             if let Some(from) = loaded.from_object {
-                if ui.button("Apply").clicked() {
+                let mut valid = loaded.to_objects.len() > 0;
+                let from_len = loaded.orca_model.sub_objects[from].1.len();
+                for (i, to) in loaded.to_objects.iter().enumerate() {
+                    if *to {
+                        if from_len != loaded.orca_model.sub_objects[i].1.len() {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+
+                if valid && ui.button("Apply").clicked() {
                     for (to, &b) in loaded.to_objects.iter().enumerate() {
                         if b {
-                            loaded.orca_model.copy_paint(from, to).unwrap();
+                            let _ = loaded.orca_model.copy_paint(from, to);
                         }
                     }
 
@@ -354,6 +366,8 @@ impl App {
                     debug!("Saving to: {:?}", output_file_path);
 
                     crate::save_load::save_orca_3mf(&output_file_path, &loaded.orca_model).unwrap();
+                } else if !valid {
+                    ui.label("Invalid selection");
                 }
             }
 
