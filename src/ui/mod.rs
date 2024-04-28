@@ -1,7 +1,10 @@
+pub mod ui_types;
+
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use egui::ahash::HashSet;
-use egui_extras::{Column, TableBuilder};
 use tracing::{debug, error, info, trace, warn};
+
+use egui::{ahash::HashSet, emath, Pos2, Rect, Sense};
+use egui_extras::{Column, TableBuilder};
 
 use egui_file::FileDialog;
 use std::{
@@ -12,6 +15,8 @@ use std::{
 
 use crate::{model_orca::OrcaModel, ProcessingEvent};
 
+use self::ui_types::*;
+
 pub fn run_eframe() -> eframe::Result<()> {
     crate::logging::init_logs();
 
@@ -21,76 +26,14 @@ pub fn run_eframe() -> eframe::Result<()> {
             .with_min_inner_size([400.0, 300.0]),
         ..Default::default()
     };
-    eframe::run_native("UnJosefizer", native_options, Box::new(|cc| Box::new(App::new(cc))))
-}
-
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct App {
-    current_tab: Tab,
-    input_files_splitting: Vec<PathBuf>,
-    input_files_conversion: Vec<PathBuf>,
-    input_files_instancing: Vec<PathBuf>,
-    output_folder: Option<PathBuf>,
-    #[serde(skip)]
-    processing_rx: Option<crossbeam_channel::Receiver<crate::ProcessingEvent>>,
-    #[serde(skip)]
-    messages: Vec<String>,
-    #[serde(skip)]
-    start_time: Option<Instant>,
-    #[serde(skip)]
-    loaded_instance_file: Option<LoadedInstanceFile>,
-}
-
-#[derive(Debug, Clone)]
-pub struct LoadedInstanceFile {
-    path: PathBuf,
-    orca_model: OrcaModel,
-    objects: Vec<(usize, String, bool)>,
-    from_object: Option<usize>,
-    // to_objects: HashMap<usize, bool>,
-    to_objects: Vec<bool>,
-}
-
-impl App {
-    pub fn current_input_files(&self) -> &Vec<PathBuf> {
-        match self.current_tab {
-            Tab::Conversion => &self.input_files_conversion,
-            Tab::Splitting => &self.input_files_splitting,
-            Tab::InstancePaint => &self.input_files_instancing,
-        }
-    }
-
-    pub fn current_input_files_mut(&mut self) -> &mut Vec<PathBuf> {
-        match self.current_tab {
-            Tab::Conversion => &mut self.input_files_conversion,
-            Tab::Splitting => &mut self.input_files_splitting,
-            Tab::InstancePaint => &mut self.input_files_instancing,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-pub enum Tab {
-    Conversion,
-    Splitting,
-    InstancePaint,
-}
-
-impl Default for Tab {
-    fn default() -> Self {
-        // Self::Splitting
-        Self::InstancePaint
-    }
-}
-
-impl App {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
-        Self::default()
-    }
+    eframe::run_native(
+        "UnJosefizer",
+        native_options,
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            Box::new(App::new(cc))
+        }),
+    )
 }
 
 impl eframe::App for App {
@@ -103,7 +46,11 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.current_tab, Tab::Splitting, "Splitting");
                 ui.selectable_value(&mut self.current_tab, Tab::Conversion, "Conversion");
-                ui.selectable_value(&mut self.current_tab, Tab::InstancePaint, "Paint Instancing");
+                ui.selectable_value(
+                    &mut self.current_tab,
+                    Tab::InstancePaint,
+                    "Paint Instancing",
+                );
             });
             // ui.separator();
         });
@@ -200,7 +147,11 @@ impl App {
                     ProcessingEvent::LoadedFile(i, dt) => {
                         let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
                         info!("{}", m);
-                        self.messages.push(format!("Loaded file: {} in {:.1}s", i + 1, dt.as_secs_f64()));
+                        self.messages.push(format!(
+                            "Loaded file: {} in {:.1}s",
+                            i + 1,
+                            dt.as_secs_f64()
+                        ));
                     }
                     ProcessingEvent::FinishedFile(i, dt) => {
                         let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
@@ -212,15 +163,19 @@ impl App {
                     }
                     ProcessingEvent::Done => {
                         let elapsed = self.start_time.unwrap().elapsed();
-                        self.messages
-                            .push(format!("Done processing files in {:.1}s", elapsed.as_secs_f64()));
+                        self.messages.push(format!(
+                            "Done processing files in {:.1}s",
+                            elapsed.as_secs_f64()
+                        ));
                         done = true;
                         break;
                     }
                     ProcessingEvent::Failed => {
                         let elapsed = self.start_time.unwrap().elapsed();
-                        self.messages
-                            .push(format!("Error processing files in {:.1}s", elapsed.as_secs_f64()));
+                        self.messages.push(format!(
+                            "Error processing files in {:.1}s",
+                            elapsed.as_secs_f64()
+                        ));
                         done = true;
                         break;
                     }
@@ -294,14 +249,19 @@ impl App {
                     .iter()
                     .enumerate()
                     .map(|(i, ob)| {
-                        let name = model.md.get_object_by_id(ob.id).unwrap().get_name().unwrap();
+                        let name = model
+                            .md
+                            .get_object_by_id(ob.id)
+                            .unwrap()
+                            .get_name()
+                            .unwrap();
 
                         // let (_, sub_model) = model.sub_models.get(i).unwrap();
                         let sub_id = &model.sub_model_ids[i];
                         let sub_model = model.sub_models.get(sub_id).unwrap();
 
                         let mut painted = false;
-                        'paint_loop: for ob2 in sub_model.resources.object.iter() {
+                        'paint_loop: for ob2 in sub_model.model.resources.object.iter() {
                             match &ob2.object {
                                 crate::model::ObjectData::Mesh(mesh) => {
                                     // painted = true;
@@ -325,13 +285,14 @@ impl App {
 
                 let to_objects = vec![false; objects.len()];
 
-                self.loaded_instance_file = Some(LoadedInstanceFile {
-                    path: path.clone(),
-                    orca_model: model,
+                self.loaded_instance_file = Some(LoadedInstanceFile::new(
+                    path.clone(),
+                    model,
                     objects,
-                    from_object: None,
+                    None,
                     to_objects,
-                });
+                    // to_objects,
+                ));
             }
         }
 
@@ -419,7 +380,29 @@ impl App {
                     crate::save_load::save_orca_3mf(&output_file_path, &loaded.orca_model).unwrap();
                 }
             }
+
+            // ui.add(egui::Image::new("file://preview.png"));
+
+            if let Some(preview) = loaded.preview.take() {
+                loaded.preview_texture =
+                    Some(ctx.load_texture("preview", preview, Default::default()));
+                // ui.add(egui::Image::from_texture(handle));
+                // ui.image((texture.id(), ui.available_size()));
+            }
+
+            if let Some(texture) = loaded.preview_texture.as_ref() {
+                ui.image((texture.id(), loaded.preview_size));
+            } else {
+                ui.spinner();
+            }
+
+            //
         }
+
+        // ui.add(egui::Image::new("file://preview.png"));
+        // ui.image(egui::include_image!("../../preview.png"));
+
+        // ui.add(egui::Image::from_texture(texture));
 
         //
     }
@@ -442,7 +425,11 @@ impl App {
                     ProcessingEvent::LoadedFile(i, dt) => {
                         let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
                         info!("{}", m);
-                        self.messages.push(format!("Loaded file: {} in {:.1}s", i + 1, dt.as_secs_f64()));
+                        self.messages.push(format!(
+                            "Loaded file: {} in {:.1}s",
+                            i + 1,
+                            dt.as_secs_f64()
+                        ));
                     }
                     ProcessingEvent::FinishedFile(i, dt) => {
                         let m = format!("Saved file: {} in {:.1}s", i + 1, dt.as_secs_f64());
@@ -454,15 +441,19 @@ impl App {
                     }
                     ProcessingEvent::Done => {
                         let elapsed = self.start_time.unwrap().elapsed();
-                        self.messages
-                            .push(format!("Done processing files in {:.1}s", elapsed.as_secs_f64()));
+                        self.messages.push(format!(
+                            "Done processing files in {:.1}s",
+                            elapsed.as_secs_f64()
+                        ));
                         done = true;
                         break;
                     }
                     ProcessingEvent::Failed => {
                         let elapsed = self.start_time.unwrap().elapsed();
-                        self.messages
-                            .push(format!("Error processing files in {:.1}s", elapsed.as_secs_f64()));
+                        self.messages.push(format!(
+                            "Error processing files in {:.1}s",
+                            elapsed.as_secs_f64()
+                        ));
                         done = true;
                         break;
                     }
@@ -524,7 +515,8 @@ fn preview_files_being_dropped(ctx: &egui::Context) {
             text
         });
 
-        let painter = ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
+        let painter =
+            ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
 
         let screen_rect = ctx.screen_rect();
         painter.rect_filled(screen_rect, 0.0, Color32::from_black_alpha(192));

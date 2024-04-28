@@ -5,6 +5,7 @@
 #![allow(unused_doc_comments)]
 #![allow(unused_labels)]
 // #![windows_subsystem = "windows"]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use unjosefizer_lib::{logging::init_logs, *};
 

@@ -22,11 +22,15 @@ use crate::metadata::orca_metadata::OrcaMetadata;
 use crate::metadata::ps_metadata as ps;
 use crate::metadata::ps_metadata::PSMetadata;
 use crate::model::*;
-use crate::model_orca::OrcaModel;
+use crate::model_orca::{OrcaModel, SubModel};
 use crate::{mesh::*, metadata};
 
 // #[cfg(feature = "nope")]
-pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], metadata: Option<&PSMetadata>, path: P) -> Result<()> {
+pub fn save_ps_3mf<P: AsRef<std::path::Path>>(
+    models: &[Model],
+    metadata: Option<&PSMetadata>,
+    path: P,
+) -> Result<()> {
     let mut writer = std::fs::File::create(path)?;
     let mut archive = ZipWriter::new(writer);
 
@@ -74,7 +78,11 @@ pub fn save_ps_3mf<P: AsRef<std::path::Path>>(models: &[Model], metadata: Option
     Ok(())
 }
 
-pub fn save_ps_generic<P: AsRef<std::path::Path>>(models: &[Model], metadata: Option<&PSMetadata>, path: P) -> Result<()> {
+pub fn save_ps_generic<P: AsRef<std::path::Path>>(
+    models: &[Model],
+    metadata: Option<&PSMetadata>,
+    path: P,
+) -> Result<()> {
     let mut writer = std::fs::File::create(path)?;
     let mut archive = ZipWriter::new(writer);
 
@@ -200,7 +208,7 @@ pub fn save_orca_3mf<P: AsRef<Path>>(path: P, model: &OrcaModel) -> Result<()> {
 
         let mut ser = Serializer::with_root(&mut xml, Some("model"))?;
         ser.indent(' ', 2);
-        sub_model.serialize(ser)?;
+        sub_model.model.serialize(ser)?;
 
         let xml = xml.replace("BambuStudio=", "xmlns:BambuStudio=");
         let xml = xml.replace("ppp=", "xmlns:p=");
@@ -324,8 +332,14 @@ pub fn load_3mf_orca(path: &str) -> Result<(Vec<Model>, PSMetadata)> {
 
             match &object.object {
                 ObjectData::Mesh(mesh) => {
-                    debug!("mesh.vertices.vertex.len() = {:?}", mesh.vertices.vertex.len());
-                    debug!("mesh.triangles.triangle.len() = {:?}", mesh.triangles.triangle.len());
+                    debug!(
+                        "mesh.vertices.vertex.len() = {:?}",
+                        mesh.vertices.vertex.len()
+                    );
+                    debug!(
+                        "mesh.triangles.triangle.len() = {:?}",
+                        mesh.triangles.triangle.len()
+                    );
                 }
                 ObjectData::Components { component } => {
                     let mut mesh = Mesh {
@@ -529,7 +543,7 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
     let re_uuid = Regex::new(r"p:UUID")?;
 
     let mut sub_models = vec![];
-    let mut sub_models_map: HashMap<String, Model> = HashMap::new();
+    let mut sub_models_map: HashMap<String, _> = HashMap::new();
     let mut sub_model_ids = vec![];
 
     // let mut components: Vec<Vec<Component>> = vec![];
@@ -541,7 +555,7 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
                     let cpath = &cpath[1..];
 
                     if sub_models_map.contains_key(cpath) {
-                        warn!("duplicate component path: {}", cpath);
+                        // warn!("duplicate component path: {}", cpath);
                         continue;
                     }
 
@@ -556,7 +570,17 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
                         let s = re_uuid.replace_all(&s, "UUID");
 
                         let mut de = Deserializer::from_str(&s);
-                        Model::deserialize(&mut de).unwrap()
+                        let sub_model = Model::deserialize(&mut de).unwrap();
+
+                        let transform = comp.transform.as_ref().unwrap();
+                        let translation = [transform[9], transform[10], transform[11]];
+
+                        SubModel {
+                            id: ob.id,
+                            model: sub_model,
+                            translation,
+                        }
+                        // (ob.id, sub_model)
                     });
 
                     sub_model_ids.push(cpath.to_string());
@@ -601,7 +625,7 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
 
                         let sub_model = sub_models_map.get(cpath).unwrap();
 
-                        for sub_model_object in sub_model.resources.object.iter() {
+                        for sub_model_object in sub_model.model.resources.object.iter() {
                             let id = sub_model_object.id;
                             if id != c.objectid {
                                 continue;
@@ -632,15 +656,15 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
 
     // Ok((model, sub_models, md_orca, slice_config))
     // unimplemented!()
-    Ok(OrcaModel {
+    Ok(OrcaModel::new(
         model,
         slice_cfg,
         md,
-        sub_models: sub_models_map,
+        sub_models_map,
         sub_model_ids,
         painted,
         rels,
-    })
+    ))
 }
 
 /// MARK: load_3mf_ps
@@ -701,8 +725,14 @@ pub fn debug_models(models: &[Model]) {
 
             match &object.object {
                 ObjectData::Mesh(mesh) => {
-                    debug!("mesh.vertices.vertex.len() = {:?}", mesh.vertices.vertex.len());
-                    debug!("mesh.triangles.triangle.len() = {:?}", mesh.triangles.triangle.len());
+                    debug!(
+                        "mesh.vertices.vertex.len() = {:?}",
+                        mesh.vertices.vertex.len()
+                    );
+                    debug!(
+                        "mesh.triangles.triangle.len() = {:?}",
+                        mesh.triangles.triangle.len()
+                    );
 
                     // debug!("checking for mmu");
                     // for t in mesh.triangles.triangle.iter() {

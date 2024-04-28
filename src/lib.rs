@@ -10,6 +10,7 @@ pub mod logging;
 pub mod mesh;
 pub mod metadata;
 pub mod model;
+pub mod model_2d_display;
 pub mod model_orca;
 pub mod paint_sharing;
 pub mod save_load;

@@ -39,10 +39,18 @@ impl OrcaModel {
                 bail!("To Sub-model {} not found in sub-models", to_comp)
             };
 
-            for (i, from_object) in from_sub_object.resources.object.iter().enumerate() {
-                let to_object = to_sub_object.resources.object.get_mut(i).context("Object index out of bounds")?;
+            for (i, from_object) in from_sub_object.model.resources.object.iter().enumerate() {
+                let to_object = to_sub_object
+                    .model
+                    .resources
+                    .object
+                    .get_mut(i)
+                    .context("Object index out of bounds")?;
                 match (&from_object.object, &mut to_object.object) {
-                    (crate::model::ObjectData::Mesh(from_mesh), crate::model::ObjectData::Mesh(to_mesh)) => {
+                    (
+                        crate::model::ObjectData::Mesh(from_mesh),
+                        crate::model::ObjectData::Mesh(to_mesh),
+                    ) => {
                         copy_paint_mesh(from_mesh, to_mesh)?;
                     }
                     _ => bail!("Unsupported object types for paint copy"),
@@ -104,7 +112,11 @@ pub fn copy_paint_mesh(from: &Mesh, to: &mut Mesh) -> Result<()> {
 
 pub fn _copy_paint_mesh(from: &Mesh, to: &mut Mesh, orca: bool) -> Result<()> {
     /// Ensure the two meshes have the same number of vertices
-    assert_eq!(from.vertices.vertex.len(), to.vertices.vertex.len(), "Vertices count mismatch");
+    assert_eq!(
+        from.vertices.vertex.len(),
+        to.vertices.vertex.len(),
+        "Vertices count mismatch"
+    );
     /// Ensure the two meshes have the same number of triangles
     assert_eq!(
         from.triangles.triangle.len(),
@@ -113,7 +125,12 @@ pub fn _copy_paint_mesh(from: &Mesh, to: &mut Mesh, orca: bool) -> Result<()> {
     );
 
     /// Copy the paint data from the source mesh to the destination mesh
-    for (from_triangle, to_triangle) in from.triangles.triangle.iter().zip(to.triangles.triangle.iter_mut()) {
+    for (from_triangle, to_triangle) in from
+        .triangles
+        .triangle
+        .iter()
+        .zip(to.triangles.triangle.iter_mut())
+    {
         if orca {
             assert!(from_triangle.mmu_ps.is_none());
             to_triangle.mmu_orca = from_triangle.mmu_orca.clone();
