@@ -32,10 +32,13 @@ pub struct LoadedInstanceFile {
     pub(super) from_object: Option<usize>,
     // to_objects: HashMap<usize, bool>,
     pub(super) to_objects: Vec<bool>,
-    // pub(super) preview: image::RgbImage,
-    pub(super) preview: Option<ColorImage>,
-    pub(super) preview_texture: Option<TextureHandle>,
-    pub(super) preview_changed: bool,
+    // // pub(super) preview: image::RgbImage,
+    // pub(super) preview: Option<ColorImage>,
+    // pub(super) preview_texture: Option<TextureHandle>,
+    // pub(super) preview_changed: bool,
+    // pub(super) preview_size: Vec2,
+    pub(super) preview_imgs: Vec<(usize, ColorImage)>,
+    pub(super) preview_texture_handles: Vec<(usize, TextureHandle)>,
     pub(super) preview_size: Vec2,
 }
 
@@ -47,17 +50,40 @@ impl LoadedInstanceFile {
         from_object: Option<usize>,
         to_objects: Vec<bool>,
     ) -> Self {
-        let preview_size = Vec2::new(300., 300.);
-        let preview = crate::model_2d_display::model_to_image(preview_size, &orca_model).unwrap();
+        let preview_size = Vec2::new(
+            orca_model.preview_size as f32,
+            orca_model.preview_size as f32,
+        );
+        // let preview = crate::model_2d_display::model_to_image(preview_size, &orca_model).unwrap();
+
+        let preview_imgs = orca_model
+            .previews
+            .iter()
+            .map(|(id, img)| {
+                let pixels = img.as_flat_samples();
+                (
+                    *id,
+                    ColorImage::from_rgba_unmultiplied(
+                        [preview_size.x as _, preview_size.y as _],
+                        pixels.as_slice(),
+                    ),
+                )
+            })
+            .collect();
+
         Self {
             path,
             orca_model,
             objects,
             from_object,
             to_objects,
-            preview: Some(preview),
-            preview_texture: None,
-            preview_changed: false,
+            // preview: Some(preview),
+            // preview: None,
+            // preview_texture: None,
+            // preview_changed: false,
+            // preview_size,
+            preview_imgs,
+            preview_texture_handles: vec![],
             preview_size,
         }
     }

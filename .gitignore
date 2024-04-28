@@ -8,3 +8,4 @@ assets/*
 *.webp
 *.gcode
 debug_output*
+preview*.png

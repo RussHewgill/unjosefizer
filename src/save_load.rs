@@ -201,7 +201,7 @@ pub fn save_orca_3mf<P: AsRef<Path>>(path: P, model: &OrcaModel) -> Result<()> {
         xml_writer.into_inner().write_all(xml.as_bytes())?;
     }
 
-    for (cpath, sub_model) in model.sub_models.iter() {
+    for (cpath, sub_model) in model.sub_models().iter() {
         archive.start_file(cpath, FileOptions::default())?;
 
         let mut xml = String::new();
@@ -545,14 +545,19 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
     let mut sub_models = vec![];
     let mut sub_models_map: HashMap<String, _> = HashMap::new();
     let mut sub_model_ids = vec![];
+    let mut sub_objects = vec![];
 
     // let mut components: Vec<Vec<Component>> = vec![];
     for ob in model.resources.object.iter() {
+        let mut components = vec![];
+
         match &ob.object {
             ObjectData::Components { component } => {
                 for comp in component.iter() {
                     let cpath = comp.path.as_ref().unwrap();
                     let cpath = &cpath[1..];
+
+                    components.push(comp.clone());
 
                     if sub_models_map.contains_key(cpath) {
                         // warn!("duplicate component path: {}", cpath);
@@ -572,13 +577,13 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
                         let mut de = Deserializer::from_str(&s);
                         let sub_model = Model::deserialize(&mut de).unwrap();
 
-                        let transform = comp.transform.as_ref().unwrap();
-                        let translation = [transform[9], transform[10], transform[11]];
+                        // let transform = comp.transform.as_ref().unwrap();
+                        // let translation = [transform[9], transform[10], transform[11]];
 
                         SubModel {
                             id: ob.id,
                             model: sub_model,
-                            translation,
+                            // translation,
                         }
                         // (ob.id, sub_model)
                     });
@@ -594,6 +599,8 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
                 bail!("Expected components, got mesh");
             }
         }
+
+        sub_objects.push((ob.id, components));
     }
 
     let slice_cfg = {
@@ -610,35 +617,47 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
         s
     };
 
+    // debug!("getting painted");
     let painted = {
         let mut painted = HashMap::new();
 
         for object in model.resources.object.iter() {
+            painted.insert(object.id, false);
+            // debug!("object[{}]", object.id);
             match &object.object {
                 ObjectData::Mesh(mesh) => {
                     panic!("Expected components, got mesh");
                 }
                 ObjectData::Components { component } => {
-                    for c in component {
+                    'comps: for c in component {
                         let cpath = c.path.as_ref().unwrap();
                         let cpath = &cpath[1..];
+                        // debug!("checking paint for {}", cpath);
 
                         let sub_model = sub_models_map.get(cpath).unwrap();
 
-                        for sub_model_object in sub_model.model.resources.object.iter() {
+                        'sub_models: for sub_model_object in sub_model.model.resources.object.iter()
+                        {
                             let id = sub_model_object.id;
                             if id != c.objectid {
-                                continue;
+                                continue 'sub_models;
                             }
 
-                            painted.insert(id, false);
+                            // debug!("checking painted tris for {}", id);
+
                             match &sub_model_object.object {
                                 ObjectData::Mesh(m) => {
                                     'paint_loop: for t in m.triangles.triangle.iter() {
-                                        if let Some(p) = t.mmu_ps.as_ref() {
-                                            painted.insert(id, true);
+                                        if t.mmu_ps.is_some() || t.mmu_orca.is_some() {
+                                            // debug!("setting painted[{}] = true", object.id);
+                                            painted.insert(object.id, true);
                                             break 'paint_loop;
                                         }
+                                        // if let Some(p) = t.mmu_ps.as_ref() {
+                                        //     debug!("setting painted[{}] = true", object.id);
+                                        //     painted.insert(object.id, true);
+                                        //     break 'paint_loop;
+                                        // }
                                     }
                                 }
                                 ObjectData::Components { .. } => {
@@ -662,6 +681,7 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
         md,
         sub_models_map,
         sub_model_ids,
+        sub_objects,
         painted,
         rels,
     ))

@@ -26,19 +26,115 @@ impl OrcaModel {
         }
 
         for i in 0..from_comps.len() {
+            let from_comp_path = &from_comps[i].path.as_ref().unwrap()[1..];
+            let to_comp_path = &to_comps[i].path.as_ref().unwrap()[1..];
+
+            let from_comp_id = from_comps[i].objectid;
+            let to_comp_id = to_comps[i].objectid;
+
+            // debug!("Copying paint from {} to {}", from_comp_path, to_comp_path);
+            debug!(
+                "Copying paint from {} : {} to {} : {}",
+                from_comp_path, from_comp_id, to_comp_path, to_comp_id
+            );
+
+            let from_sub_object = self
+                .sub_models()
+                .get(from_comp_path)
+                .context("From Sub-model not found in sub-models")?
+                .clone();
+
+            let to_sub_object = self
+                .sub_models_mut()
+                .get_mut(to_comp_path)
+                .context("To Sub-model not found in sub-models")?;
+
+            let from_object = from_sub_object
+                .model
+                .resources
+                .object
+                .iter()
+                .find(|o| o.id == from_comp_id)
+                .context("Object not found in source sub-model")?;
+
+            let to_object = to_sub_object
+                .model
+                .resources
+                .object
+                .iter_mut()
+                .find(|o| o.id == to_comp_id)
+                .context("Object not found in destination sub-model")?;
+
+            match (&from_object.object, &mut to_object.object) {
+                (
+                    crate::model::ObjectData::Mesh(from_mesh),
+                    crate::model::ObjectData::Mesh(to_mesh),
+                ) => {
+                    copy_paint_mesh(from_mesh, to_mesh)?;
+                }
+                _ => bail!("Unsupported object types for paint copy"),
+            }
+
+            //
+        }
+
+        #[cfg(feature = "nope")]
+        for i in 0..from_comps.len() {
             let from_comp = &from_comps[i].path.as_ref().unwrap()[1..];
-            let to_comp = &to_comps[i].path.as_ref().unwrap()[1..];
+            // let to_comp = &to_comps[i].path.as_ref().unwrap()[1..];
 
-            debug!("Copying paint from {} to {}", from_comp, to_comp);
+            let from_comp_id = from_comps[i].objectid;
+            // to_comp_id = to_comps[i].objectid;
 
-            let Some(from_sub_object) = self.sub_models.get(from_comp).cloned() else {
+            debug!("Copying paint from {} : {}", from_comp, from_comp_id);
+
+            let _to_comp = to_comps
+                .iter()
+                .find(|c| c.objectid == from_comp_id)
+                .context("Component not found in destination object")?;
+
+            let to_comp = &_to_comp.path.as_ref().unwrap()[1..];
+
+            debug!(
+                "Copying paint from {} : {} to {} : {}",
+                from_comp, from_comp_id, to_comp, _to_comp.objectid
+            );
+
+            let Some(from_sub_object) = self.sub_models().get(from_comp).cloned() else {
                 bail!("From Sub-model {} not found in sub-models", from_comp)
             };
 
-            let Some(to_sub_object) = self.sub_models.get_mut(to_comp) else {
+            let Some(to_sub_object) = self.sub_models_mut().get_mut(to_comp) else {
                 bail!("To Sub-model {} not found in sub-models", to_comp)
             };
 
+            let from_object = from_sub_object
+                .model
+                .resources
+                .object
+                .iter()
+                .find(|o| o.id == from_comp_id)
+                .context("Object not found in source sub-model")?;
+
+            let to_object = to_sub_object
+                .model
+                .resources
+                .object
+                .iter_mut()
+                .find(|o| o.id == from_comp_id)
+                .context("Object not found in destination sub-model")?;
+
+            match (&from_object.object, &mut to_object.object) {
+                (
+                    crate::model::ObjectData::Mesh(from_mesh),
+                    crate::model::ObjectData::Mesh(to_mesh),
+                ) => {
+                    copy_paint_mesh(from_mesh, to_mesh)?;
+                }
+                _ => bail!("Unsupported object types for paint copy"),
+            }
+
+            #[cfg(feature = "nope")]
             for (i, from_object) in from_sub_object.model.resources.object.iter().enumerate() {
                 let to_object = to_sub_object
                     .model

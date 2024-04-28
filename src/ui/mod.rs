@@ -227,84 +227,70 @@ impl App {
             }
         });
 
-        if ui.button("Load file...").clicked() {
-            let mut picker = rfd::FileDialog::new().add_filter("filter", &["3mf"]);
-            if let Some(path) = picker.pick_file() {
-                self.current_input_files_mut().clear();
-                self.current_input_files_mut().push(path);
+        ui.horizontal(|ui| {
+            if ui.button("Load file...").clicked() {
+                let mut picker = rfd::FileDialog::new().add_filter("filter", &["3mf"]);
+                if let Some(path) = picker.pick_file() {
+                    self.current_input_files_mut().clear();
+                    self.current_input_files_mut().push(path);
+                }
             }
-        }
 
-        if let Some(path) = self.current_input_files().get(0) {
-            ui.monospace(path.display().to_string());
-        }
-
-        if let Some(path) = self.current_input_files().get(0) {
-            if ui.button("Load input file").clicked() {
-                std::fs::copy(path, format!("{}.bak", path.display())).unwrap();
-                let model = crate::save_load::load_3mf_orca_noconvert(path).unwrap();
-
-                let objects: Vec<_> = model
-                    .get_objects()
-                    .iter()
-                    .enumerate()
-                    .map(|(i, ob)| {
-                        let name = model
-                            .md
-                            .get_object_by_id(ob.id)
-                            .unwrap()
-                            .get_name()
-                            .unwrap();
-
-                        // let (_, sub_model) = model.sub_models.get(i).unwrap();
-                        let sub_id = &model.sub_model_ids[i];
-                        let sub_model = model.sub_models.get(sub_id).unwrap();
-
-                        let mut painted = false;
-                        'paint_loop: for ob2 in sub_model.model.resources.object.iter() {
-                            match &ob2.object {
-                                crate::model::ObjectData::Mesh(mesh) => {
-                                    // painted = true;
-                                    for t in mesh.triangles.triangle.iter() {
-                                        if t.mmu_orca.is_some() {
-                                            painted = true;
-                                            break 'paint_loop;
-                                        }
-                                    }
-                                    break;
-                                }
-                                _ => {}
-                            }
-                            // painted = true;
-                            break;
-                        }
-
-                        (i, name, painted)
-                    })
-                    .collect();
-
-                let to_objects = vec![false; objects.len()];
-
-                self.loaded_instance_file = Some(LoadedInstanceFile::new(
-                    path.clone(),
-                    model,
-                    objects,
-                    None,
-                    to_objects,
-                    // to_objects,
-                ));
+            if let Some(path) = self.current_input_files().get(0) {
+                ui.monospace(path.display().to_string());
             }
-        }
+        });
+
+        ui.horizontal(|ui| {
+            if let Some(path) = self.current_input_files().get(0) {
+                if ui.button("Load input file").clicked() {
+                    std::fs::copy(path, format!("{}.bak", path.display())).unwrap();
+                    let model = crate::save_load::load_3mf_orca_noconvert(path).unwrap();
+
+                    let objects: Vec<_> = model
+                        .get_objects()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, ob)| {
+                            let name = model
+                                .md
+                                .get_object_by_id(ob.id)
+                                .unwrap()
+                                .get_name()
+                                .unwrap();
+
+                            let painted = *model.painted.get(&ob.id).unwrap_or(&false);
+
+                            (i, name, painted)
+                        })
+                        .collect();
+
+                    let to_objects = vec![false; objects.len()];
+
+                    self.loaded_instance_file = Some(LoadedInstanceFile::new(
+                        path.clone(),
+                        model,
+                        objects,
+                        None,
+                        to_objects,
+                        // to_objects,
+                    ));
+                }
+            }
+
+            if let Some(loaded) = self.loaded_instance_file.as_mut() {
+                ui.label("Loaded:");
+                ui.monospace(loaded.path.display().to_string());
+            }
+        });
 
         if let Some(loaded) = self.loaded_instance_file.as_mut() {
-            ui.label("Loaded:");
-            ui.monospace(loaded.path.display().to_string());
-
             ui.group(|ui| {
                 TableBuilder::new(ui)
                     .striped(true)
                     .column(Column::auto().at_least(20.))
                     .column(Column::auto().at_least(20.))
+                    .column(Column::auto().at_least(30.))
                     .column(Column::auto().at_least(250.))
                     .column(Column::auto().at_least(20.))
                     .header(20., |mut header| {
@@ -313,6 +299,9 @@ impl App {
                         });
                         header.col(|ui| {
                             ui.label("To");
+                        });
+                        header.col(|ui| {
+                            ui.label("Parts");
                         });
                         header.col(|ui| {
                             ui.label("Name");
@@ -338,6 +327,8 @@ impl App {
                                         ui.add(egui::Checkbox::without_text(selected));
                                     }
                                 });
+
+                                row.col(|ui| {});
 
                                 row.col(|ui| {
                                     ui.label(loaded.objects[id].1.clone());
@@ -375,7 +366,7 @@ impl App {
                     let output_folder = self.output_folder.clone().unwrap();
                     let output_file_path = output_folder.join(file_name);
 
-                    // debug!("Saving to: {:?}", output_file_path);
+                    debug!("Saving to: {:?}", output_file_path);
 
                     crate::save_load::save_orca_3mf(&output_file_path, &loaded.orca_model).unwrap();
                 }
@@ -383,18 +374,51 @@ impl App {
 
             // ui.add(egui::Image::new("file://preview.png"));
 
-            if let Some(preview) = loaded.preview.take() {
-                loaded.preview_texture =
-                    Some(ctx.load_texture("preview", preview, Default::default()));
-                // ui.add(egui::Image::from_texture(handle));
-                // ui.image((texture.id(), ui.available_size()));
+            for (i, (id, preview)) in loaded.preview_imgs.drain(..).enumerate() {
+                loaded.preview_texture_handles.push((
+                    id,
+                    ctx.load_texture(&format!("preview_{}", i), preview, Default::default()),
+                ));
             }
 
-            if let Some(texture) = loaded.preview_texture.as_ref() {
-                ui.image((texture.id(), loaded.preview_size));
-            } else {
-                ui.spinner();
+            // ui.allocate_ui
+            // debug!("r: {:?}", r);
+
+            let rect = ui.available_rect_before_wrap();
+            for (id, tex) in loaded.preview_texture_handles.iter() {
+                // ui.allocate_ui_at_rect(Rect::from_two_pos(rect.min, rect.max), |ui| {
+                //     ui.image((tex.id(), loaded.preview_size));
+                // });
+
+                let tint = if *loaded.orca_model.painted.get(&id).unwrap_or(&false) {
+                    egui::Color32::from_rgba_premultiplied(0, 255, 0, 64)
+                } else {
+                    egui::Color32::from_rgba_premultiplied(255, 0, 0, 64)
+                };
+
+                let img = egui::Image::new((tex.id(), loaded.preview_size)).tint(tint);
+                // .paint_at(ui, rect);
+                // .paint_at(ui, rect);
+                ui.allocate_ui_at_rect(rect, |ui| {
+                    // ui.image((tex.id(), loaded.preview_size));
+                    ui.add(img);
+                });
+
+                // ui.put(rect, img);
             }
+
+            // if let Some(preview) = loaded.preview.take() {
+            //     loaded.preview_texture =
+            //         Some(ctx.load_texture("preview", preview, Default::default()));
+            //     // ui.add(egui::Image::from_texture(handle));
+            //     // ui.image((texture.id(), ui.available_size()));
+            // }
+
+            // if let Some(texture) = loaded.preview_texture.as_ref() {
+            //     ui.image((texture.id(), loaded.preview_size));
+            // } else {
+            //     ui.spinner();
+            // }
 
             //
         }
