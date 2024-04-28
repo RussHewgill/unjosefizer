@@ -247,32 +247,12 @@ impl App {
                     std::fs::copy(path, format!("{}.bak", path.display())).unwrap();
                     let model = crate::save_load::load_3mf_orca_noconvert(path).unwrap();
 
-                    let objects: Vec<_> = model
-                        .get_objects()
-                        .iter()
-                        .enumerate()
-                        .map(|(i, ob)| {
-                            let name = model
-                                .md
-                                .get_object_by_id(ob.id)
-                                .unwrap()
-                                .get_name()
-                                .unwrap();
-
-                            let painted = *model.painted.get(&ob.id).unwrap_or(&false);
-
-                            (i, name, painted)
-                        })
-                        .collect();
-
-                    let to_objects = vec![false; objects.len()];
-
                     self.loaded_instance_file = Some(LoadedInstanceFile::new(
                         path.clone(),
                         model,
-                        objects,
+                        // objects,
                         None,
-                        to_objects,
+                        // to_objects,
                         // to_objects,
                     ));
                 }
@@ -328,7 +308,12 @@ impl App {
                                     }
                                 });
 
-                                row.col(|ui| {});
+                                row.col(|ui| {
+                                    ui.label(&format!(
+                                        "{}",
+                                        loaded.orca_model.sub_objects[id].1.len()
+                                    ));
+                                });
 
                                 row.col(|ui| {
                                     ui.label(loaded.objects[id].1.clone());

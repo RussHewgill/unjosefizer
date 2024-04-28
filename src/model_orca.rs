@@ -12,21 +12,6 @@ use crate::{
     model::{Component, Model, Object},
 };
 
-// #[derive(Debug, Clone)]
-// pub struct OrcaModel {
-//     pub model: Model,
-//     pub slice_cfg: String,
-//     pub md: OrcaMetadata,
-//     /// maps path to model, and model's id (not the sub-object's id)
-//     // pub sub_models: HashMap<String, (usize, Model)>,
-//     pub sub_models: HashMap<String, SubModel>,
-//     pub sub_model_ids: Vec<String>,
-//     // pub aabbs: Vec<
-//     pub painted: HashMap<usize, bool>,
-//     pub rels: String,
-//     // meshes: Vec<Mesh>,
-// }
-
 #[derive(Debug, Clone)]
 pub struct OrcaModel {
     pub model: Model,

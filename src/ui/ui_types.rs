@@ -46,9 +46,9 @@ impl LoadedInstanceFile {
     pub fn new(
         path: PathBuf,
         orca_model: OrcaModel,
-        objects: Vec<(usize, String, bool)>,
+        // objects: Vec<(usize, String, bool)>,
         from_object: Option<usize>,
-        to_objects: Vec<bool>,
+        // to_objects: Vec<bool>,
     ) -> Self {
         let preview_size = Vec2::new(
             orca_model.preview_size as f32,
@@ -70,6 +70,26 @@ impl LoadedInstanceFile {
                 )
             })
             .collect();
+
+        let objects: Vec<_> = orca_model
+            .get_objects()
+            .iter()
+            .enumerate()
+            .map(|(i, ob)| {
+                let name = orca_model
+                    .md
+                    .get_object_by_id(ob.id)
+                    .unwrap()
+                    .get_name()
+                    .unwrap();
+
+                let painted = *orca_model.painted.get(&ob.id).unwrap_or(&false);
+
+                (i, name, painted)
+            })
+            .collect();
+
+        let to_objects = vec![false; objects.len()];
 
         Self {
             path,
