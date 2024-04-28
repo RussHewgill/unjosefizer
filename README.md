@@ -2,24 +2,35 @@
 
 Unjosefizer is a Rust application that will load a `.3mf` file saved by Bambu Studio/Orca Slicer, and convert it to a `.3mf` that can be read by Prusaslicer, while maintaining the MMU painting.
 
-## Update v0.2
+Has since become a general purpose `.3mf` manipulation utility.
 
-Prusaslicer has since added this function, so I decided to do something else that they can't:
+## Caveats
+
+- **Do not use on files you haven't backed up!**
+
+## Usage
+
+### Paint instancing
+
+Bambu studio/Orca don't have instancing like Prusaslicer, so this aims to mimic that.
+
+- Save a `.3mf` with Bambu/Orca that contains multiple identical objects with different painting
+- Load the file in the "Paint Instancing" tab
+- Choose an object to copy the paint from (You may want to rename the object in the slicer)
+- Choose one or more objects to copy the paint onto
+- Click "Apply" and wait for the program to unfreeze.
 
 ### Splitting models without losing the painting
 
-- to do this, use Prusaslicer to save a 3mf containing two copies of the model:
+Doesn't work with Bambu/Orca `.3mf` files for now.
+
+- To do this, use Prusaslicer to save a 3mf containing two copies of the model:
   - One painted, that isn't split
   - One split, with no painting
 - Load the file and process it under the "Splitting" tab
 - The newly created file will contain the split model with the paint copied over
 
-## Caveats
-
-- **Do not use on files you haven't backed up!**
-- Essentially everything except meshes and MMU painting will be discarded
-
-## Use
+### 3mf converting
 
 - Run the program
 - Choose an output folder
@@ -27,7 +38,7 @@ Prusaslicer has since added this function, so I decided to do something else tha
 - Click "Process"
 - The files will be renamed from `name.3mf` to `name_ps.3mf`
 
-## Running
+## Building from source
 
 To build, you will need [Rust](https://www.rust-lang.org/tools/install) installed.
 To run, `git clone` or download this repository, and run
@@ -35,6 +46,7 @@ To run, `git clone` or download this repository, and run
 cargo build --release
 ```
 
-## If this is helpful, consider buying me a coffee
+## If this is helpful to you, consider buying me a coffee:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I3I1W8O4I)
+
