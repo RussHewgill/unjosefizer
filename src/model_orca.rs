@@ -62,7 +62,7 @@ impl OrcaModel {
             preview_size: 200,
         };
 
-        out.generate_previews();
+        // out.generate_previews();
 
         out
     }

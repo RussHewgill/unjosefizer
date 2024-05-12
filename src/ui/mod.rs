@@ -375,6 +375,7 @@ impl App {
 
             // ui.add(egui::Image::new("file://preview.png"));
 
+            #[cfg(feature = "nope")]
             for (i, (id, preview)) in loaded.preview_imgs.drain(..).enumerate() {
                 loaded.preview_texture_handles.push((
                     id,
@@ -386,6 +387,7 @@ impl App {
             // debug!("r: {:?}", r);
 
             let rect = ui.available_rect_before_wrap();
+            #[cfg(feature = "nope")]
             for (id, tex) in loaded.preview_texture_handles.iter() {
                 // ui.allocate_ui_at_rect(Rect::from_two_pos(rect.min, rect.max), |ui| {
                 //     ui.image((tex.id(), loaded.preview_size));
