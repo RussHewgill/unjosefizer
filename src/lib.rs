@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 #![allow(unused_doc_comments)]
 #![allow(unused_labels)]
+#![allow(unexpected_cfgs)]
 
 pub mod instancing;
 pub mod logging;

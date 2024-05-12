@@ -344,7 +344,9 @@ impl App {
                 if valid && ui.button("Apply").clicked() {
                     for (to, &b) in loaded.to_objects.iter().enumerate() {
                         if b {
-                            let _ = loaded.orca_model.copy_paint(from, to);
+                            if let Err(e) = loaded.orca_model.copy_paint(from, to) {
+                                error!("Error copying paint: {:?}", e);
+                            }
                         }
                     }
 
