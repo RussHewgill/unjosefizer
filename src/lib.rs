@@ -13,6 +13,7 @@ pub mod metadata;
 pub mod model;
 pub mod model_2d_display;
 pub mod model_orca;
+pub mod paint_convert;
 pub mod paint_sharing;
 pub mod save_load;
 pub mod splitting;
@@ -24,10 +25,14 @@ use std::{f32::consts::E, time::Duration};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use crossbeam_channel::Sender;
 use tracing::{debug, error, info, trace, warn};
+use tracing_subscriber::field::debug;
 
 use crate::{
     logging::init_logs,
-    save_load::{debug_models, load_3mf_orca, load_3mf_orca_noconvert, load_3mf_ps, save_orca_3mf, save_ps_3mf, save_ps_generic},
+    save_load::{
+        debug_models, load_3mf_orca, load_3mf_orca_noconvert, load_3mf_ps, save_orca_3mf,
+        save_ps_3mf, save_ps_generic,
+    },
     splitting::SplitModel,
 };
 
@@ -75,7 +80,10 @@ pub fn process_files_conversion(
 
         let Some(path2) = &path.to_str() else {
             warn!("Invalid path: {:?}", path);
-            sender.send(ProcessingEvent::Warning(format!("Invalid path: {:?}", path)))?;
+            sender.send(ProcessingEvent::Warning(format!(
+                "Invalid path: {:?}",
+                path
+            )))?;
             continue;
         };
         let t0 = std::time::Instant::now();
@@ -87,12 +95,18 @@ pub fn process_files_conversion(
 
                 let Some(file_name) = path.file_name() else {
                     warn!("Invalid file name: {:?}", path);
-                    sender.send(ProcessingEvent::Warning(format!("Invalid file name: {:?}", path)))?;
+                    sender.send(ProcessingEvent::Warning(format!(
+                        "Invalid file name: {:?}",
+                        path
+                    )))?;
                     continue;
                 };
                 let Some(file_name) = file_name.to_str() else {
                     warn!("Invalid file name: {:?}", path);
-                    sender.send(ProcessingEvent::Warning(format!("Invalid file name: {:?}", path)))?;
+                    sender.send(ProcessingEvent::Warning(format!(
+                        "Invalid file name: {:?}",
+                        path
+                    )))?;
                     continue;
                 };
 
@@ -107,7 +121,10 @@ pub fn process_files_conversion(
                     }
                     Err(e) => {
                         error!("Error saving 3mf: {:?}", e);
-                        sender.send(ProcessingEvent::Warning(format!("Error saving 3mf: {:?}", e)))?;
+                        sender.send(ProcessingEvent::Warning(format!(
+                            "Error saving 3mf: {:?}",
+                            e
+                        )))?;
                     }
                 }
                 // unimplemented!("TODO: save_ps_3mf");
@@ -145,7 +162,10 @@ pub fn process_files_splitting(
 
         let Some(path2) = &path.to_str() else {
             warn!("Invalid path: {:?}", path);
-            sender.send(ProcessingEvent::Warning(format!("Invalid path: {:?}", path)))?;
+            sender.send(ProcessingEvent::Warning(format!(
+                "Invalid path: {:?}",
+                path
+            )))?;
             continue;
         };
         let t0 = std::time::Instant::now();
@@ -159,12 +179,18 @@ pub fn process_files_splitting(
 
                 let Some(file_name) = path.file_name() else {
                     warn!("Invalid file name: {:?}", path);
-                    sender.send(ProcessingEvent::Warning(format!("Invalid file name: {:?}", path)))?;
+                    sender.send(ProcessingEvent::Warning(format!(
+                        "Invalid file name: {:?}",
+                        path
+                    )))?;
                     continue;
                 };
                 let Some(file_name) = file_name.to_str() else {
                     warn!("Invalid file name: {:?}", path);
-                    sender.send(ProcessingEvent::Warning(format!("Invalid file name: {:?}", path)))?;
+                    sender.send(ProcessingEvent::Warning(format!(
+                        "Invalid file name: {:?}",
+                        path
+                    )))?;
                     continue;
                 };
 
@@ -174,7 +200,10 @@ pub fn process_files_splitting(
                 let output_file_path = output_folder.join(file_name);
 
                 if models[0].resources.object.len() != 2 {
-                    error!("Invalid number of objects: {}", models[0].resources.object.len());
+                    error!(
+                        "Invalid number of objects: {}",
+                        models[0].resources.object.len()
+                    );
                     sender.send(ProcessingEvent::Warning(format!(
                         "Invalid number of objects: {}",
                         models[0].resources.object.len()
@@ -213,7 +242,10 @@ pub fn process_files_splitting(
                     }
                     Err(e) => {
                         error!("Error saving 3mf: {:?}", e);
-                        sender.send(ProcessingEvent::Warning(format!("Error saving 3mf: {:?}", e)))?;
+                        sender.send(ProcessingEvent::Warning(format!(
+                            "Error saving 3mf: {:?}",
+                            e
+                        )))?;
                     }
                 }
             }
@@ -251,8 +283,50 @@ pub fn test_main() -> Result<()> {
     Ok(())
 }
 
+/// paint conversion test
+pub fn test_main() -> Result<()> {
+    crate::logging::init_logs();
+
+    info!("paint conversion test");
+
+    // let path = "paint_test_input.3mf";
+
+    // let mut model = load_3mf_orca_noconvert(path).unwrap();
+
+    // let model = crate::paint_convert::convert_model_color(model, 1, 2)?;
+
+    // let path_output = "paint_test_output.3mf";
+
+    // // <triangle v1="1" v2="6" v3="2" paint_color="4"/> // color 0  binary = 0100
+    // // <triangle v1="1" v2="6" v3="2" paint_color="8"/> // color 1, binary = 1000
+
+    // save_orca_3mf(path_output, &model)?;
+
+    let s = "4";
+    // let s = "8";
+    // let s = "2C";
+    let s2 = crate::paint_convert::convert_triangle_color(s, 1, 2);
+    debug!("converted 1 to 2, {} to {}", s, s2);
+
+    let s2 = crate::paint_convert::convert_triangle_color(s, 1, 3);
+    debug!("converted 1 to 3, {} to {}", s, s2);
+
+    let s = "8";
+    let s2 = crate::paint_convert::convert_triangle_color(s, 2, 1);
+    debug!("converted 2 to 1, {} to {}", s, s2);
+
+    let s = "2C";
+    let s2 = crate::paint_convert::convert_triangle_color(s, 3, 1);
+    debug!("converted 3 to 1, {} to {}", s, s2);
+
+    // let s = "8";
+    // let s = "2C";
+
+    Ok(())
+}
+
 /// orca noconvert test
-// #[cfg(feature = "nope")]
+#[cfg(feature = "nope")]
 pub fn test_main() -> Result<()> {
     crate::logging::init_logs();
 
@@ -260,19 +334,19 @@ pub fn test_main() -> Result<()> {
 
     let path = "assets/instance_test.3mf";
 
-    let t0 = std::time::Instant::now();
-    // let (model, sub_models, md, slice_cfg) = load_3mf_orca_noconvert(path).unwrap();
-    let mut model = load_3mf_orca_noconvert(path).unwrap();
-    let t1 = std::time::Instant::now();
+    // let t0 = std::time::Instant::now();
+    // // let (model, sub_models, md, slice_cfg) = load_3mf_orca_noconvert(path).unwrap();
+    // let mut model = load_3mf_orca_noconvert(path).unwrap();
+    // let t1 = std::time::Instant::now();
 
-    // debug!("slice_cfg: {:?}", slice_cfg);
+    // // debug!("slice_cfg: {:?}", slice_cfg);
 
-    model.copy_paint(0, 2).unwrap();
+    // model.copy_paint(0, 2).unwrap();
 
-    let path_out = "assets/instance_test2.3mf";
+    // let path_out = "assets/instance_test2.3mf";
 
-    // save_orca_3mf(path_out, &model, &sub_models, &md, &slice_cfg)?;
-    save_orca_3mf(path_out, &model)?;
+    // // save_orca_3mf(path_out, &model, &sub_models, &md, &slice_cfg)?;
+    // save_orca_3mf(path_out, &model)?;
 
     Ok(())
 }
@@ -296,11 +370,22 @@ pub fn test_main() -> Result<()> {
     debug!("num_objects: {}", num_objects);
 
     for (i, ob) in models[0].resources.object.iter().enumerate() {
-        let name = md.object.iter().find(|o| o.id == ob.id).unwrap().get_name().unwrap();
+        let name = md
+            .object
+            .iter()
+            .find(|o| o.id == ob.id)
+            .unwrap()
+            .get_name()
+            .unwrap();
         // let name = ob.name.as_ref().unwrap();
         debug!("object[{}]: {}", i, name);
 
-        let transform = &models[0].build.get_item_by_id(ob.id).unwrap().get_xyz().unwrap();
+        let transform = &models[0]
+            .build
+            .get_item_by_id(ob.id)
+            .unwrap()
+            .get_xyz()
+            .unwrap();
 
         debug!("transform: {:?}", transform);
 
@@ -310,7 +395,11 @@ pub fn test_main() -> Result<()> {
     /// cube 1
     let from = 0;
 
-    let from_mesh = models[0].resources.object[from].object.get_mesh().unwrap().clone();
+    let from_mesh = models[0].resources.object[from]
+        .object
+        .get_mesh()
+        .unwrap()
+        .clone();
 
     for i in 0..num_objects {
         if i == from {
@@ -345,7 +434,10 @@ pub fn test_main() -> Result<()> {
     let t1 = std::time::Instant::now();
 
     let dur_load = t1 - t0;
-    debug!("load time: {:?}", (dur_load.as_secs_f64() * 1e3).round() / 1e3);
+    debug!(
+        "load time: {:?}",
+        (dur_load.as_secs_f64() * 1e3).round() / 1e3
+    );
 
     use crate::splitting::SplitModel;
 
@@ -357,19 +449,28 @@ pub fn test_main() -> Result<()> {
     crate::splitting::convert_paint(split0, &mut split1);
     let t3 = std::time::Instant::now();
 
-    debug!("convert time: {:?}", ((t3 - t2).as_secs_f64() * 1e3).round() / 1e3);
+    debug!(
+        "convert time: {:?}",
+        ((t3 - t2).as_secs_f64() * 1e3).round() / 1e3
+    );
 
     let mut models2 = models.clone();
 
     split1.update_object(&mut models2[0].resources.object[1]);
     let t4 = std::time::Instant::now();
-    debug!("update time: {:?}", ((t4 - t3).as_secs_f64() * 1e3).round() / 1e3);
+    debug!(
+        "update time: {:?}",
+        ((t4 - t3).as_secs_f64() * 1e3).round() / 1e3
+    );
 
     save_ps_3mf(&models2, md.as_ref(), "assets/split_ps_out.3mf").unwrap();
     let t5 = std::time::Instant::now();
 
     let dur_save = t5 - t4;
-    debug!("save time: {:?}", (dur_save.as_secs_f64() * 1e3).round() / 1e3);
+    debug!(
+        "save time: {:?}",
+        (dur_save.as_secs_f64() * 1e3).round() / 1e3
+    );
 
     Ok(())
 }
@@ -403,8 +504,14 @@ pub fn test_main() -> Result<()> {
 
     let dur_load = t1 - t0;
     let dur_save = t2 - t1;
-    debug!("load time: {:?}", (dur_load.as_secs_f64() * 1e3).round() / 1e3);
-    debug!("save time: {:?}", (dur_save.as_secs_f64() * 1e3).round() / 1e3);
+    debug!(
+        "load time: {:?}",
+        (dur_load.as_secs_f64() * 1e3).round() / 1e3
+    );
+    debug!(
+        "save time: {:?}",
+        (dur_save.as_secs_f64() * 1e3).round() / 1e3
+    );
 
     Ok(())
 }

@@ -17,27 +17,29 @@ path = "src/main.rs"
 
 [dependencies]
 serde = { version = "1.0.195", features = ["derive"] }
-zip = "0.6.6"
-quick-xml = { version = "0.31.0", features = ["serialize"] }
-anyhow = "1.0.81"
-tracing = "0.1.40"
+# zip = "0.6.6"
+zip = "2.2.3"
+quick-xml = { version = "0.37.2", features = ["serialize"] }
+anyhow = "1.0.97"
+tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-log = "0.2.0"
-tracing-subscriber = { version = "0.3.18", features = [
+tracing-subscriber = { version = "0.3.19", features = [
     "local-time",
     "env-filter",
     "json",
     "registry",
 ] }
-regex = "1.10.4"
-eframe = { version = "0.27", features = ["persistence"] }
-egui = "0.27"
-egui_file = "0.17.0"
-rfd = "0.14.1"
-nalgebra = "0.32.4"
-crossbeam-channel = "0.5.12"
+regex = "1.11.1"
+eframe = { version = "0.31.1", features = ["persistence"] }
+egui = "0.31.1"
+egui_file = "0.22.0"
+rfd = "0.15.2"
+nalgebra = "0.33.2"
+crossbeam-channel = "0.5.14"
 rayon = "1.10.0"
-rstar = "0.12.0"
-egui_extras = { version = "0.27.2", features = ["file", "image", "svg"] }
-image = { version = "0.25.1", features = ["jpeg", "png"] }
-imageproc = "0.24.0"
+rstar = "0.12.2"
+egui_extras = { version = "0.31.1", features = ["file", "image", "svg"] }
+image = { version = "0.25.5", features = ["jpeg", "png"] }
+imageproc = "0.25.0"
+bitvec = "1.0.1"

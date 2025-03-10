@@ -34,16 +34,19 @@ pub fn save_ps_3mf<P: AsRef<std::path::Path>>(
     let mut writer = std::fs::File::create(path)?;
     let mut archive = ZipWriter::new(writer);
 
-    archive.start_file("[Content_Types].xml", FileOptions::default())?;
+    let options = zip::write::SimpleFileOptions::default();
+
+    archive.start_file("[Content_Types].xml", options)?;
+    // archive.start_file("[Content_Types].xml", FileOptions::default())?;
     archive.write_all(include_bytes!("../templates/content_types.xml"))?;
 
-    archive.start_file("_rels/.rels", FileOptions::default())?;
+    archive.start_file("_rels/.rels", options)?;
     archive.write_all(include_bytes!("../templates/rels.xml"))?;
 
     // warn!("using first model only");
     let model = models[0].clone();
 
-    archive.start_file("3D/3dmodel.model", FileOptions::default())?;
+    archive.start_file("3D/3dmodel.model", options)?;
 
     let mut xml = String::new();
 
@@ -59,7 +62,7 @@ pub fn save_ps_3mf<P: AsRef<std::path::Path>>(
     xml_writer.into_inner().write_all(xml.as_bytes())?;
 
     if let Some(md) = metadata {
-        archive.start_file("Metadata/Slic3r_PE_model.config", FileOptions::default())?;
+        archive.start_file("Metadata/Slic3r_PE_model.config", options)?;
 
         let mut xml = String::new();
 
@@ -83,13 +86,15 @@ pub fn save_ps_generic<P: AsRef<std::path::Path>>(
     metadata: Option<&PSMetadata>,
     path: P,
 ) -> Result<()> {
+    let options = zip::write::SimpleFileOptions::default();
+
     let mut writer = std::fs::File::create(path)?;
     let mut archive = ZipWriter::new(writer);
 
-    archive.start_file("[Content_Types].xml", FileOptions::default())?;
+    archive.start_file("[Content_Types].xml", options)?;
     archive.write_all(include_bytes!("../templates/content_types.xml"))?;
 
-    archive.start_file("_rels/.rels", FileOptions::default())?;
+    archive.start_file("_rels/.rels", options)?;
     archive.write_all(include_bytes!("../templates/rels.xml"))?;
 
     let model = {
@@ -113,7 +118,7 @@ pub fn save_ps_generic<P: AsRef<std::path::Path>>(
         model
     };
 
-    archive.start_file("3D/3dmodel.model", FileOptions::default())?;
+    archive.start_file("3D/3dmodel.model", options)?;
 
     let mut xml = String::new();
 
@@ -129,7 +134,7 @@ pub fn save_ps_generic<P: AsRef<std::path::Path>>(
     xml_writer.into_inner().write_all(xml.as_bytes())?;
 
     if let Some(md) = metadata {
-        archive.start_file("Metadata/Slic3r_PE_model.config", FileOptions::default())?;
+        archive.start_file("Metadata/Slic3r_PE_model.config", options)?;
 
         let mut xml = String::new();
 
@@ -150,18 +155,20 @@ pub fn save_ps_generic<P: AsRef<std::path::Path>>(
 
 /// MARK: save_orca_3mf
 pub fn save_orca_3mf<P: AsRef<Path>>(path: P, model: &OrcaModel) -> Result<()> {
+    let options = zip::write::SimpleFileOptions::default();
+
     let mut writer = std::fs::File::create(path)?;
     let mut archive = ZipWriter::new(writer);
 
-    archive.start_file("[Content_Types].xml", FileOptions::default())?;
+    archive.start_file("[Content_Types].xml", options)?;
     archive.write_all(include_bytes!("../templates/content_types.xml"))?;
 
-    archive.start_file("_rels/.rels", FileOptions::default())?;
+    archive.start_file("_rels/.rels", options)?;
     archive.write_all(include_bytes!("../templates/rels.xml"))?;
 
     /// main model
     {
-        archive.start_file("3D/3dmodel.model", FileOptions::default())?;
+        archive.start_file("3D/3dmodel.model", options)?;
 
         let mut xml = String::new();
 
@@ -179,15 +186,15 @@ pub fn save_orca_3mf<P: AsRef<Path>>(path: P, model: &OrcaModel) -> Result<()> {
     }
 
     /// project settings
-    archive.start_file("Metadata/project_settings.config", FileOptions::default())?;
+    archive.start_file("Metadata/project_settings.config", options)?;
     archive.write_all(model.slice_cfg.as_bytes())?;
 
-    archive.start_file("3D/_rels/3dmodel.model.rels", FileOptions::default())?;
+    archive.start_file("3D/_rels/3dmodel.model.rels", options)?;
     archive.write_all(model.rels.as_bytes())?;
 
     /// metadata
     {
-        archive.start_file("Metadata/model_settings.config", FileOptions::default())?;
+        archive.start_file("Metadata/model_settings.config", options)?;
 
         let mut xml = String::new();
 
@@ -202,7 +209,7 @@ pub fn save_orca_3mf<P: AsRef<Path>>(path: P, model: &OrcaModel) -> Result<()> {
     }
 
     for (cpath, sub_model) in model.sub_models().iter() {
-        archive.start_file(cpath, FileOptions::default())?;
+        archive.start_file(cpath, options)?;
 
         let mut xml = String::new();
 

@@ -31,7 +31,7 @@ pub fn run_eframe() -> eframe::Result<()> {
         native_options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Box::new(App::new(cc))
+            Ok(Box::new(App::new(cc)))
         }),
     )
 }
@@ -301,6 +301,7 @@ impl App {
 
                                 row.col(|ui| {
                                     if Some(id) == loaded.from_object {
+                                        #[allow(deprecated)]
                                         ui.set_enabled(false);
                                         ui.add(egui::Checkbox::without_text(&mut false));
                                     } else {

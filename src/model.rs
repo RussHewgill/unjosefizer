@@ -7,11 +7,19 @@ use serde::{Deserialize, Serialize};
 pub struct Model {
     #[serde(rename = "@xmlns", default)]
     pub xmlns: String,
-    #[serde(rename = "@BambuStudio", default, skip_serializing_if = "String::is_empty")]
+    #[serde(
+        rename = "@BambuStudio",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
     pub bambustudio: String,
     #[serde(rename = "@ppp", default, skip_serializing_if = "String::is_empty")]
     pub p: String,
-    #[serde(rename = "@requiredextensions", default, skip_serializing_if = "String::is_empty")]
+    #[serde(
+        rename = "@requiredextensions",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
     pub requiredextensions: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metadata: Vec<Metadata>,

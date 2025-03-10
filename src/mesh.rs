@@ -32,14 +32,18 @@ pub struct Mesh {
 impl Mesh {
     pub fn merge(&mut self, other: &Mesh) -> usize {
         let offset = self.vertices.vertex.len();
-        self.vertices.vertex.extend(other.vertices.vertex.iter().cloned());
-        self.triangles.triangle.extend(other.triangles.triangle.iter().map(|t| Triangle {
-            v1: t.v1 + offset,
-            v2: t.v2 + offset,
-            v3: t.v3 + offset,
-            mmu_ps: t.mmu_ps.clone(),
-            mmu_orca: t.mmu_orca.clone(),
-        }));
+        self.vertices
+            .vertex
+            .extend(other.vertices.vertex.iter().cloned());
+        self.triangles
+            .triangle
+            .extend(other.triangles.triangle.iter().map(|t| Triangle {
+                v1: t.v1 + offset,
+                v2: t.v2 + offset,
+                v3: t.v3 + offset,
+                mmu_ps: t.mmu_ps.clone(),
+                mmu_orca: t.mmu_orca.clone(),
+            }));
         offset
     }
 
@@ -61,9 +65,22 @@ impl Mesh {
         self.vertices.vertex = verts.to_vec();
     }
 
-    pub fn apply_transform(&mut self, id: usize, transform_md: &[f64], transform_component: &[f64]) {
-        assert_eq!(transform_md.len(), 16, "Object Metadata Transform must be 16 elements");
-        assert_eq!(transform_component.len(), 12, "Component Transform must be 12 elements");
+    pub fn apply_transform(
+        &mut self,
+        id: usize,
+        transform_md: &[f64],
+        transform_component: &[f64],
+    ) {
+        assert_eq!(
+            transform_md.len(),
+            16,
+            "Object Metadata Transform must be 16 elements"
+        );
+        assert_eq!(
+            transform_component.len(),
+            12,
+            "Component Transform must be 12 elements"
+        );
 
         let mat_md = nalgebra::Matrix4::from_row_slice(&transform_md);
         let mat_model = nalgebra::Matrix4x3::from_row_slice(&transform_component);
