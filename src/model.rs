@@ -97,6 +97,20 @@ impl ObjectData {
             _ => None,
         }
     }
+
+    pub fn get_components(&self) -> Option<&Vec<Component>> {
+        match self {
+            ObjectData::Components { component } => Some(component),
+            _ => None,
+        }
+    }
+
+    pub fn get_components_mut(&mut self) -> Option<&mut Vec<Component>> {
+        match self {
+            ObjectData::Components { component } => Some(component),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

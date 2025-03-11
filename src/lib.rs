@@ -289,7 +289,11 @@ pub fn test_main() -> Result<()> {
 
     info!("paint conversion test");
 
-    // let path = "paint_test_input.3mf";
+    let path = "paint_test_input.3mf";
+
+    let info = crate::paint_convert::PaintConvertInfo::load_from_file(std::path::Path::new(path))?;
+
+    debug!("info: {:?}", info);
 
     // let mut model = load_3mf_orca_noconvert(path).unwrap();
 
@@ -297,27 +301,27 @@ pub fn test_main() -> Result<()> {
 
     // let path_output = "paint_test_output.3mf";
 
-    // // <triangle v1="1" v2="6" v3="2" paint_color="4"/> // color 0  binary = 0100
-    // // <triangle v1="1" v2="6" v3="2" paint_color="8"/> // color 1, binary = 1000
-
     // save_orca_3mf(path_output, &model)?;
 
-    let s = "4";
-    // let s = "8";
-    // let s = "2C";
-    let s2 = crate::paint_convert::convert_triangle_color(s, 1, 2);
-    debug!("converted 1 to 2, {} to {}", s, s2);
+    #[cfg(feature = "nope")]
+    {
+        let s = "4";
+        // let s = "8";
+        // let s = "0C";
+        let s2 = crate::paint_convert::convert_triangle_color(s, 1, 2);
+        debug!("converted 1 to 2, {} to {}", s, s2);
 
-    let s2 = crate::paint_convert::convert_triangle_color(s, 1, 3);
-    debug!("converted 1 to 3, {} to {}", s, s2);
+        let s2 = crate::paint_convert::convert_triangle_color(s, 1, 3);
+        debug!("converted 1 to 3, {} to {}", s, s2);
 
-    let s = "8";
-    let s2 = crate::paint_convert::convert_triangle_color(s, 2, 1);
-    debug!("converted 2 to 1, {} to {}", s, s2);
+        let s = "8";
+        let s2 = crate::paint_convert::convert_triangle_color(s, 2, 1);
+        debug!("converted 2 to 1, {} to {}", s, s2);
 
-    let s = "2C";
-    let s2 = crate::paint_convert::convert_triangle_color(s, 3, 1);
-    debug!("converted 3 to 1, {} to {}", s, s2);
+        let s = "0C";
+        let s2 = crate::paint_convert::convert_triangle_color(s, 3, 1);
+        debug!("converted 3 to 1, {} to {}", s, s2);
+    }
 
     // let s = "8";
     // let s = "2C";

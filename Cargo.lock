@@ -4197,6 +4197,7 @@ dependencies = [
  "rfd",
  "rstar",
  "serde",
+ "serde_json",
  "tracing",
  "tracing-appender",
  "tracing-log",

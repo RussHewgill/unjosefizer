@@ -13,7 +13,7 @@ use std::{
     time::Instant,
 };
 
-use crate::{model_orca::OrcaModel, ProcessingEvent};
+use crate::{model_orca::OrcaModel, paint_convert::PaintConvertInfo, ProcessingEvent};
 
 use self::ui_types::*;
 
@@ -44,6 +44,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("tab_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
+                ui.selectable_value(&mut self.current_tab, Tab::ColorConvert, "Color Convert");
                 ui.selectable_value(&mut self.current_tab, Tab::Splitting, "Splitting");
                 ui.selectable_value(&mut self.current_tab, Tab::Conversion, "Conversion");
                 ui.selectable_value(
@@ -58,6 +59,10 @@ impl eframe::App for App {
         if self.current_tab == Tab::InstancePaint {
             egui::CentralPanel::default().show(ctx, |ui| {
                 self.show_instancing(ctx, ui);
+            });
+        } else if self.current_tab == Tab::ColorConvert {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                self.show_color_conversion(ctx, ui);
             });
         } else {
             egui::CentralPanel::default().show(ctx, |ui| {
@@ -101,6 +106,7 @@ impl eframe::App for App {
                 }
 
                 match self.current_tab {
+                    Tab::ColorConvert => self.show_color_conversion(ctx, ui),
                     Tab::Conversion => self.show_conversion(ctx, ui),
                     Tab::Splitting => self.show_splitting(ctx, ui),
                     Tab::InstancePaint => self.show_instancing(ctx, ui),
@@ -129,6 +135,130 @@ impl eframe::App for App {
 }
 
 impl App {
+    fn show_color_conversion(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui.button("Load file...").clicked() {
+                let mut picker = rfd::FileDialog::new().add_filter("filter", &["3mf"]);
+                if let Some(path) = picker.pick_file() {
+                    self.current_input_files_mut().clear();
+                    self.current_input_files_mut().push(path);
+                }
+            }
+
+            if let Some(path) = self.current_input_files().get(0) {
+                ui.monospace(path.display().to_string());
+            }
+        });
+
+        if ui.button("Process file").clicked() {
+            debug!("Processing file: {:?}", self.current_input_files()[0]);
+            let path = self.current_input_files()[0].clone();
+            let info = PaintConvertInfo::load_from_file(&path).unwrap();
+
+            debug!("found {:?} colors: {:?}", info.colors.len(), info.colors);
+            for _ in info.colors.iter() {
+                self.color_convert_from_to.push(String::new());
+            }
+
+            self.color_convert_from_to.truncate(info.colors.len());
+
+            self.color_convert_file_info = Some((path.clone(), info));
+        }
+
+        ui.separator();
+
+        if let Some(info) = &self.color_convert_file_info {
+            ui.label("Colors loaded:");
+        }
+
+        for (i, color) in self.color_convert_from_to.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(format!("{: >2}: ", i + 1));
+
+                // let text = format!("{}: \u{2B1B}", i);
+                let text = "\u{2B1B}";
+
+                let mut job = egui::text::LayoutJob::default();
+
+                let c = self.color_convert_file_info.as_ref().unwrap().1.colors[i];
+
+                job.append(
+                    text,
+                    0.0,
+                    egui::TextFormat {
+                        color: egui::Color32::from_rgb(c.0, c.1, c.2),
+                        ..Default::default()
+                    },
+                );
+
+                ui.label(job);
+
+                ui.text_edit_singleline(color);
+            });
+        }
+
+        if ui.button("Reset").clicked() {
+            for c in self.color_convert_from_to.iter_mut() {
+                c.clear();
+            }
+        }
+
+        ui.checkbox(&mut self.color_convert_in_place, "Modify in-place");
+
+        let Some(path) = self.current_input_files().get(0) else {
+            return;
+        };
+
+        let output_path = if self.color_convert_in_place {
+            path.clone()
+        } else {
+            let Some(output_folder) = self.output_folder.as_ref() else {
+                return;
+            };
+
+            let Some(file_name) = path.file_name() else {
+                warn!("Invalid file name: {:?}", path);
+                return;
+            };
+            let Some(file_name) = file_name.to_str() else {
+                warn!("Invalid file name: {:?}", path);
+                return;
+            };
+
+            let file_name = file_name.replace(".3mf", "");
+            let file_name = format!("{}_ps.3mf", file_name);
+
+            let output_file_path = output_folder.join(file_name);
+            output_file_path
+        };
+
+        if ui.button("Convert").clicked() {
+            let mut model = crate::save_load::load_3mf_orca_noconvert(path).unwrap();
+
+            let mut colors: Vec<Option<usize>> = vec![];
+            colors.push(None);
+            for c in self.color_convert_from_to.iter() {
+                let c = match usize::from_str_radix(c, 16) {
+                    Ok(c) => Some(c),
+                    Err(e) => None,
+                };
+                // colors.push(c.map(|c| c + 1));
+                colors.push(c);
+            }
+
+            for (i, c) in colors.iter().enumerate() {
+                debug!("Color {}: {:?}", i + 1, c);
+            }
+
+            let Ok(model) = crate::paint_convert::convert_model_color(model, colors) else {
+                error!("Error converting model");
+                return;
+            };
+
+            crate::save_load::save_orca_3mf(output_path, &model).unwrap();
+        }
+    }
+
     fn show_splitting(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let button = if self.processing_rx.is_some() {
             let _ = ui.button("Processing...");

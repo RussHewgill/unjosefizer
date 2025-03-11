@@ -4,12 +4,16 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use egui::{ColorImage, TextureHandle, Vec2};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::model_orca::OrcaModel;
+use crate::{model_orca::OrcaModel, paint_convert::PaintConvertInfo};
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
     pub(super) current_tab: Tab,
+    pub(super) input_files_color_convert: Vec<PathBuf>,
+    pub(super) color_convert_file_info: Option<(PathBuf, PaintConvertInfo)>,
+    pub(super) color_convert_from_to: Vec<String>,
+    pub(super) color_convert_in_place: bool,
     pub(super) input_files_splitting: Vec<PathBuf>,
     pub(super) input_files_conversion: Vec<PathBuf>,
     pub(super) input_files_instancing: Vec<PathBuf>,
@@ -112,6 +116,7 @@ impl LoadedInstanceFile {
 impl App {
     pub fn current_input_files(&self) -> &Vec<PathBuf> {
         match self.current_tab {
+            Tab::ColorConvert => &self.input_files_color_convert,
             Tab::Conversion => &self.input_files_conversion,
             Tab::Splitting => &self.input_files_splitting,
             Tab::InstancePaint => &self.input_files_instancing,
@@ -120,6 +125,7 @@ impl App {
 
     pub fn current_input_files_mut(&mut self) -> &mut Vec<PathBuf> {
         match self.current_tab {
+            Tab::ColorConvert => &mut self.input_files_color_convert,
             Tab::Conversion => &mut self.input_files_conversion,
             Tab::Splitting => &mut self.input_files_splitting,
             Tab::InstancePaint => &mut self.input_files_instancing,
@@ -129,6 +135,7 @@ impl App {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum Tab {
+    ColorConvert,
     Conversion,
     Splitting,
     InstancePaint,

@@ -1,22 +1,103 @@
+use std::io::{BufReader, Read};
+
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use tracing::{debug, error, info, trace, warn};
 
 use bitvec::prelude::*;
+use tracing_subscriber::field::debug;
+use zip::ZipArchive;
 
 use crate::model_orca::OrcaModel;
 
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+pub struct PaintConvertInfo {
+    pub colors: Vec<(u8, u8, u8)>,
+}
+
+impl PaintConvertInfo {
+    pub fn load_from_file(path: &std::path::Path) -> Result<Self> {
+        let file = std::fs::read(path)?;
+        let mut reader = std::io::Cursor::new(&file);
+
+        let mut zip = ZipArchive::new(reader)?;
+
+        let info_path = "Metadata/project_settings.config";
+
+        let mut info_file = zip.by_name(info_path)?;
+
+        let mut info: serde_json::Value = serde_json::from_reader(info_file)?;
+
+        // debug!("info: {:?}", info);
+
+        // let filament_colors = info["filament_colour"]
+        //     .as_array()
+        //     .context("filament_color not found")?;
+
+        // debug!("filament_color: {:?}", filament_colors);
+
+        let x = &info["filament_colour"]
+            .as_array()
+            .context("filament_color not found")?;
+
+        // debug!("x: {:?}", x);
+
+        // convert from #rrggbb to (r, g, b)
+        let colors = x
+            .iter()
+            .map(|c| {
+                let color = c.as_str().context("color not a string")?;
+                let r = u8::from_str_radix(&color[1..3], 16)?;
+                let g = u8::from_str_radix(&color[3..5], 16)?;
+                let b = u8::from_str_radix(&color[5..7], 16)?;
+                Ok((r, g, b))
+            })
+            .collect::<Result<Vec<(u8, u8, u8)>>>()?;
+
+        Ok(Self { colors })
+    }
+}
+
 pub fn convert_model_color(
     mut model: OrcaModel,
-    from_extruder: usize,
-    to_extruder: usize,
+    conversions: Vec<Option<usize>>,
+    // from_extruder: usize,
+    // to_extruder: usize,
 ) -> Result<OrcaModel> {
-    for object in model.model.resources.object.iter_mut() {
-        let Some(mesh) = object.object.get_mesh_mut() else {
-            warn!("Object {} does not have a mesh", object.id);
+    let mut comps = Vec::new();
+
+    for object in model.model.resources.object.iter() {
+        // let Some(mesh) = object.object.get_mesh_mut() else {
+        //     warn!("Object {} does not have a mesh", object.id);
+        //     continue;
+        // };
+
+        let Some(model_comps) = object.object.get_components() else {
+            warn!("Object {} does not have components", object.id);
             continue;
         };
 
-        convert_mesh_color(mesh, from_extruder, to_extruder)?;
+        comps.extend_from_slice(&model_comps);
+
+        // convert_mesh_color(mesh, from_extruder, to_extruder)?;
+    }
+
+    for comp in comps.iter() {
+        let sub_model = model
+            .sub_models_mut()
+            .get_mut(&comp.path.as_ref().unwrap()[1..])
+            .context("From Sub-model not found in sub-models")?;
+
+        for object in sub_model.model.resources.object.iter_mut() {
+            let mesh = object
+                .object
+                .get_mesh_mut()
+                .context("Object does not have a mesh")?;
+
+            // debug!("Converting mesh color for object {}", object.id);
+            convert_mesh_color(mesh, conversions.clone())?;
+        }
+
+        //
     }
 
     Ok(model)
@@ -24,19 +105,25 @@ pub fn convert_model_color(
 
 pub fn convert_mesh_color(
     mesh: &mut crate::mesh::Mesh,
-    from_extruder: usize,
-    to_extruder: usize,
+    // from_extruder: usize,
+    // to_extruder: usize,
+    conversions: Vec<Option<usize>>,
 ) -> Result<()> {
     for tri in mesh.triangles.triangle.iter_mut() {
         let Some(s) = tri.mmu_orca.as_ref() else {
             continue;
         };
 
-        let s2 = convert_triangle_color(&s, from_extruder as u8, to_extruder as u8);
+        // debug!("Converting triangle color for triangle {:?}", tri);
+        let s2 = convert_triangle_color(&s, &conversions);
+
+        tri.mmu_orca = Some(s2);
+        // let s2 = convert_triangle_color(&s, from_extruder as u8, to_extruder as u8);
     }
     Ok(())
 }
 
+#[cfg(feature = "nope")]
 pub fn convert_triangle_color(input_str: &str, from_color: u8, to_color: u8) -> String {
     if input_str.is_empty() {
         return String::new();
@@ -52,11 +139,10 @@ pub fn convert_triangle_color(input_str: &str, from_color: u8, to_color: u8) -> 
         };
         let low_4 = digit & 0b1111;
         let high_4 = digit >> 4;
-        // digits.push(digit);
-        digits.push(high_4);
-        if (high_4 & 0b1100) != 0 {
-            digits.push(low_4);
+        if low_4 == 0b1100 {
+            digits.push(high_4);
         }
+        digits.push(low_4);
     }
 
     debug!("len = {}", digits.len());
@@ -70,8 +156,9 @@ pub fn convert_triangle_color(input_str: &str, from_color: u8, to_color: u8) -> 
 
         // debug!("Nibble0: {}", nibble0);
 
-        // let bv = &nibble0.view_bits::<Msb0>();
-        // debug!("Bits: {}", bv);
+        // let bv = &nibble0.view_bits::<Msb0>()[4..];
+        let bv = &nibble0.view_bits::<Msb0>();
+        debug!("Bits: {}", bv);
 
         let state = &nibble0.view_bits::<Msb0>()[4..6].load_be::<u8>();
 
@@ -97,7 +184,7 @@ pub fn convert_triangle_color(input_str: &str, from_color: u8, to_color: u8) -> 
                 _ => panic!("Invalid state"),
             };
 
-            debug!("color = {}", color);
+            // debug!("color = {}", color);
 
             let color = if color == from_color { to_color } else { color };
 
@@ -109,14 +196,62 @@ pub fn convert_triangle_color(input_str: &str, from_color: u8, to_color: u8) -> 
         }
     }
 
-    for digit in out.chunks_exact(2) {
-        // debug!("Digit: {:?}, {:?}", digit[0], digit[1]);
-        let digit = digit[0] << 4 | digit[1];
-        debug!("Digit: {:X}", digit);
+    // let bitstream = out
+    //     .iter()
+    //     .flat_map(|&x| x.view_bits::<Msb0>())
+    //     .collect::<BitVec<Msb0, u8>>();
 
-        let bv = &digit.view_bits::<Msb0>();
-        debug!("Bits: {}", bv);
+    // debug!("bitstream: {:?}", bitstream);
+
+    debug!("out: {:?}", out);
+
+    let chars = out.view_bits::<Msb0>().chunks(16);
+
+    let mut result = String::with_capacity(out.len());
+
+    // let x = 0b
+
+    for c in chars {
+        let c = c.load_be::<u16>();
+        debug!("c: {:016b}", c);
+        debug!("c: {:?}", c);
+        // convert C to a hex digit
+        let ch = if c < 10 {
+            (b'0' + c as u8) as char
+        } else {
+            (b'A' + (c - 10) as u8) as char
+        };
+        result.push(ch);
     }
+
+    // while let Some(nibble) = nibbles.next() {
+    //     // check if there are 4 bits or 8 bits
+    //     let digit = nibble.load_be::<u8>();
+    //     // debug!("digit: {:04b}", digit);
+    //     if digit == 0b1100 {
+    //         let Some(next) = nibbles.next() else {
+    //             panic!("expected additional 4 bits");
+    //         };
+    //         unimplemented!()
+    //     } else {
+    //         let ch = if digit < 10 {
+    //             (b'0' + digit as u8) as char
+    //         } else {
+    //             (b'A' + (digit - 10) as u8) as char
+    //         };
+    //         result.push(ch);
+    //     }
+    // }
+
+    // let mut result = String::with_capacity(out.len());
+    // for digit in out.iter() {
+    //     let ch = if *digit < 10 {
+    //         (b'0' + *digit as u8) as char
+    //     } else {
+    //         (b'A' + (*digit - 10) as u8) as char
+    //     };
+    //     result.push(ch);
+    // }
 
     unimplemented!()
     // String::new()
@@ -344,12 +479,8 @@ fn bits_to_int(bits: &[bool], offset: usize, num_bits: usize) -> u32 {
 ///
 /// # Returns
 /// A new hex string with the converted triangle data
-#[cfg(feature = "nope")]
-pub fn convert_triangle_color(
-    hex_string: &str,
-    from_extruder: usize,
-    to_extruder: usize,
-) -> String {
+// #[cfg(feature = "nope")]
+pub fn convert_triangle_color(hex_string: &str, conversions: &[Option<usize>]) -> String {
     // If the string is empty, there's no painting data
     if hex_string.is_empty() {
         return String::new();
@@ -412,7 +543,54 @@ pub fn convert_triangle_color(
                 first_nibble >> 2
             };
 
+            let from_extruder = current_state as usize;
+            // #[cfg(feature = "nope")]
+            if let Some(to_extruder) = conversions[from_extruder] {
+                modified = true;
+
+                // Add appropriate nibbles to new_bitstream based on target state
+                if to_extruder < 3 {
+                    // Target is simple format (0-2)
+                    let new_nibble = (to_extruder as u32) << 2;
+                    for bit_idx in 0..4 {
+                        new_bitstream.push((new_nibble & (1 << bit_idx)) > 0);
+                    }
+
+                    if (first_nibble & 0b1100) == 0b1100 {
+                        // Skip the second nibble of extended format
+                        idx += 8;
+                    } else {
+                        idx += 4;
+                    }
+                } else {
+                    // Target is extended format (>=3)
+                    // First nibble: 1100 (extended format indicator)
+                    new_bitstream.push(false); // bit 0
+                    new_bitstream.push(false); // bit 1
+                    new_bitstream.push(true); // bit 2
+                    new_bitstream.push(true); // bit 3
+
+                    // Second nibble: value - 3
+                    let extended_value = to_extruder as u32 - 3;
+                    for bit_idx in 0..4 {
+                        new_bitstream.push((extended_value & (1 << bit_idx)) > 0);
+                    }
+
+                    if (first_nibble & 0b1100) == 0b1100 {
+                        // Skip both nibbles of the original extended format
+                        idx += 8;
+                    } else {
+                        idx += 4;
+                    }
+                }
+                continue;
+            }
+
+            // let from_extruder = 2;
+            // let to_extruder = 4;
+
             // If this matches our from_extruder, convert it
+            #[cfg(feature = "nope")]
             if current_state == from_extruder as u32 {
                 modified = true;
 
