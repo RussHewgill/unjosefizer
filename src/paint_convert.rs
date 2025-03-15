@@ -9,9 +9,99 @@ use zip::ZipArchive;
 
 use crate::model_orca::OrcaModel;
 
+pub mod model_config {
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    pub struct ModelConfig {
+        #[serde(rename = "object", default)]
+        pub objects: Vec<ModelObject>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct ModelObject {
+        #[serde(rename = "@id")]
+        pub id: String,
+
+        #[serde(rename = "metadata", default)]
+        pub metadata: Vec<Metadata>,
+
+        #[serde(rename = "part", default)]
+        pub parts: Vec<Part>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct Metadata {
+        #[serde(rename = "@key")]
+        pub key: String,
+
+        #[serde(rename = "@value")]
+        pub value: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct Part {
+        #[serde(rename = "@id")]
+        pub id: String,
+
+        #[serde(rename = "@subtype")]
+        pub subtype: String,
+
+        #[serde(rename = "metadata", default)]
+        pub metadata: Vec<Metadata>,
+
+        #[serde(rename = "mesh_stat")]
+        pub mesh_stat: MeshStat,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct MeshStat {
+        #[serde(rename = "@edges_fixed")]
+        pub edges_fixed: String,
+
+        #[serde(rename = "@degenerate_facets")]
+        pub degenerate_facets: String,
+
+        #[serde(rename = "@facets_removed")]
+        pub facets_removed: String,
+
+        #[serde(rename = "@facets_reversed")]
+        pub facets_reversed: String,
+
+        #[serde(rename = "@backwards_edges")]
+        pub backwards_edges: String,
+    }
+
+    impl ModelObject {
+        /// Returns the name of the object from its metadata, if available
+        pub fn get_name(&self) -> Option<&str> {
+            self.metadata
+                .iter()
+                .find(|meta| meta.key == "name")
+                .map(|meta| meta.value.as_str())
+        }
+    }
+
+    impl Part {
+        /// Returns the name of the part from its metadata, if available
+        pub fn get_name(&self) -> Option<&str> {
+            self.metadata
+                .iter()
+                .find(|meta| meta.key == "name")
+                .map(|meta| meta.value.as_str())
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PaintConvertInfo {
     pub colors: Vec<(u8, u8, u8)>,
+    pub objects: Vec<PaintConvertObject>,
+}
+
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+pub struct PaintConvertObject {
+    name: String,
 }
 
 impl PaintConvertInfo {
@@ -27,19 +117,9 @@ impl PaintConvertInfo {
 
         let mut info: serde_json::Value = serde_json::from_reader(info_file)?;
 
-        // debug!("info: {:?}", info);
-
-        // let filament_colors = info["filament_colour"]
-        //     .as_array()
-        //     .context("filament_color not found")?;
-
-        // debug!("filament_color: {:?}", filament_colors);
-
         let x = &info["filament_colour"]
             .as_array()
             .context("filament_color not found")?;
-
-        // debug!("x: {:?}", x);
 
         // convert from #rrggbb to (r, g, b)
         let colors = x
@@ -53,7 +133,29 @@ impl PaintConvertInfo {
             })
             .collect::<Result<Vec<(u8, u8, u8)>>>()?;
 
-        Ok(Self { colors })
+        let mut objects = Vec::new();
+
+        {
+            let model_path = "Metadata/model_settings.config";
+            let mut model_file = zip.by_name(model_path)?;
+
+            let mut s = String::new();
+            model_file.read_to_string(&mut s)?;
+
+            let mut de = quick_xml::de::Deserializer::from_str(&s);
+            let config: model_config::ModelConfig = serde::Deserialize::deserialize(&mut de)?;
+
+            // Extract object names
+            for object in config.objects {
+                if let Some(name) = object.get_name() {
+                    objects.push(PaintConvertObject {
+                        name: name.to_string(),
+                    });
+                }
+            }
+        }
+
+        Ok(Self { colors, objects })
     }
 }
 

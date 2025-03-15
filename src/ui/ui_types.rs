@@ -10,10 +10,13 @@ use crate::{model_orca::OrcaModel, paint_convert::PaintConvertInfo};
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
     pub(super) current_tab: Tab,
+
     pub(super) input_files_color_convert: Vec<PathBuf>,
     pub(super) color_convert_file_info: Option<(PathBuf, PaintConvertInfo)>,
-    pub(super) color_convert_from_to: Vec<String>,
+    // pub(super) color_convert_from_to: Vec<String>,
+    pub(super) color_convert_from_to: Vec<Option<usize>>,
     pub(super) color_convert_in_place: bool,
+
     pub(super) input_files_splitting: Vec<PathBuf>,
     pub(super) input_files_conversion: Vec<PathBuf>,
     pub(super) input_files_instancing: Vec<PathBuf>,

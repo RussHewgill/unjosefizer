@@ -1,9 +1,10 @@
 pub mod ui_types;
+pub mod utilities;
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use tracing::{debug, error, info, trace, warn};
 
-use egui::{ahash::HashSet, emath, Pos2, Rect, Sense};
+use egui::{ahash::HashSet, emath, Color32, Pos2, Rect, Sense, Stroke, StrokeKind};
 use egui_extras::{Column, TableBuilder};
 
 use egui_file::FileDialog;
@@ -42,6 +43,10 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if cfg!(debug_assertions) && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
         egui::TopBottomPanel::top("tab_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.current_tab, Tab::ColorConvert, "Color Convert");
@@ -137,6 +142,18 @@ impl eframe::App for App {
 impl App {
     fn show_color_conversion(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
+            if ui.button("Choose output folder..").clicked() {
+                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                    self.output_folder = Some(path);
+                }
+            }
+
+            if let Some(path) = &self.output_folder {
+                ui.monospace(path.display().to_string());
+            }
+        });
+
+        ui.horizontal(|ui| {
             if ui.button("Load file...").clicked() {
                 let mut picker = rfd::FileDialog::new().add_filter("filter", &["3mf"]);
                 if let Some(path) = picker.pick_file() {
@@ -156,8 +173,9 @@ impl App {
             let info = PaintConvertInfo::load_from_file(&path).unwrap();
 
             debug!("found {:?} colors: {:?}", info.colors.len(), info.colors);
+            // self.color_convert_from_to.clear();
             for _ in info.colors.iter() {
-                self.color_convert_from_to.push(String::new());
+                self.color_convert_from_to.push(None);
             }
 
             self.color_convert_from_to.truncate(info.colors.len());
@@ -169,37 +187,94 @@ impl App {
 
         if let Some(info) = &self.color_convert_file_info {
             ui.label("Colors loaded:");
-        }
 
-        for (i, color) in self.color_convert_from_to.iter_mut().enumerate() {
-            ui.horizontal(|ui| {
-                ui.label(format!("{: >2}: ", i + 1));
+            // for each color in the file:
+            // show a label with that color, and a dropdown box allowing selection of any other color
 
-                // let text = format!("{}: \u{2B1B}", i);
-                let text = "\u{2B1B}";
+            for color_idx in 0..self.color_convert_from_to.len() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{: >2}: ", color_idx));
 
-                let mut job = egui::text::LayoutJob::default();
+                    let c = info.1.colors[color_idx];
 
-                let c = self.color_convert_file_info.as_ref().unwrap().1.colors[i];
+                    let mut rect = ui.available_rect_before_wrap();
 
-                job.append(
-                    text,
-                    0.0,
-                    egui::TextFormat {
-                        color: egui::Color32::from_rgb(c.0, c.1, c.2),
-                        ..Default::default()
-                    },
-                );
+                    rect.set_width(rect.height());
 
-                ui.label(job);
+                    let mut painter = ui.painter();
+                    painter.rect_filled(rect, 0.0, Color32::from_rgb(c.0, c.1, c.2));
+                    painter.rect_stroke(
+                        rect,
+                        0.,
+                        Stroke::new(
+                            2.,
+                            ui.style().visuals.widgets.noninteractive.fg_stroke.color,
+                        ),
+                        StrokeKind::Middle,
+                    );
 
-                ui.text_edit_singleline(color);
-            });
+                    // ui.label(utilities::colored_box(c, None));
+
+                    ui.add_space(rect.width() + 8.);
+
+                    egui::ComboBox::from_id_salt(color_idx + 12345)
+                        .width(300.)
+                        .selected_text(match self.color_convert_from_to[color_idx] {
+                            Some(id) => {
+                                let c = info.1.colors[id];
+                                utilities::colored_box(c, Some(&format!("{}", id)))
+                            }
+                            None => egui::text::LayoutJob::default(),
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut self.color_convert_from_to[color_idx],
+                                None,
+                                "None",
+                            );
+
+                            for (i, c) in info.1.colors.iter().enumerate() {
+                                let text = utilities::colored_box(*c, Some(&format!("{}", i)));
+                                ui.selectable_value(
+                                    &mut self.color_convert_from_to[color_idx],
+                                    Some(i),
+                                    text,
+                                );
+                            }
+                        });
+                });
+            }
+
+            #[cfg(feature = "nope")]
+            for (i, color_from) in self.color_convert_from_to.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{: >2}: ", i + 1));
+
+                    let c = self.color_convert_file_info.as_ref().unwrap().1.colors[i];
+
+                    ui.label(utilities::colored_box(c, None));
+
+                    egui::ComboBox::from_id_salt(i + 12345)
+                        .width(300.)
+                        .selected_text(match color_from {
+                            Some(id) => utilities::colored_box(c, Some(&format!("{}", id))),
+                            None => egui::text::LayoutJob::default(),
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(color_from, None, "None");
+
+                            for (i, c) in info.1.colors.iter().enumerate() {
+                                let text = utilities::colored_box(*c, Some(&format!("{}", i + 1)));
+                                ui.selectable_value(color_from, Some(i), text);
+                            }
+                        });
+                });
+            }
         }
 
         if ui.button("Reset").clicked() {
             for c in self.color_convert_from_to.iter_mut() {
-                c.clear();
+                *c = None;
             }
         }
 
@@ -237,13 +312,13 @@ impl App {
 
             let mut colors: Vec<Option<usize>> = vec![];
             colors.push(None);
-            for c in self.color_convert_from_to.iter() {
-                let c = match usize::from_str_radix(c, 16) {
-                    Ok(c) => Some(c),
-                    Err(e) => None,
-                };
-                // colors.push(c.map(|c| c + 1));
-                colors.push(c);
+            // colors.extend_from_slice(&self.color_convert_from_to);
+
+            for (i, c) in self.color_convert_from_to.iter().enumerate() {
+                debug!("Color {}: {:?}", i + 1, c);
+                colors.push(c.map(|c| c + 1));
+                // colors.push(*c);
+                // colors.push(c.map(|c| c - 1));
             }
 
             for (i, c) in colors.iter().enumerate() {
@@ -254,6 +329,12 @@ impl App {
                 error!("Error converting model");
                 return;
             };
+
+            if self.color_convert_in_place {
+                // make backup of original file
+                let backup_path = format!("{}", path.display()).replace(".3mf", ".bak.3mf");
+                std::fs::copy(&path, &backup_path).unwrap();
+            }
 
             crate::save_load::save_orca_3mf(output_path, &model).unwrap();
         }
