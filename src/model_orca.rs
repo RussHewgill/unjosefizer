@@ -21,6 +21,7 @@ pub struct OrcaModel {
     // pub sub_models: HashMap<String, (usize, Model)>,
     sub_models: HashMap<String, SubModel>,
     sub_model_ids: Vec<String>,
+    pub empty_models: std::collections::HashSet<String>,
     pub sub_objects: Vec<(usize, Vec<Component>)>,
     // pub aabbs: Vec<
     pub painted: HashMap<usize, bool>,
@@ -45,6 +46,7 @@ impl OrcaModel {
         // sub_models: HashMap<String, (usize, Model)>,
         sub_models: HashMap<String, SubModel>,
         sub_model_ids: Vec<String>,
+        empty_models: std::collections::HashSet<String>,
         sub_objects: Vec<(usize, Vec<Component>)>,
         painted: HashMap<usize, bool>,
         rels: String,
@@ -55,6 +57,7 @@ impl OrcaModel {
             md,
             sub_models,
             sub_model_ids,
+            empty_models,
             sub_objects,
             painted,
             rels,

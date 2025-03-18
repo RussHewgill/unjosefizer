@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Instant};
+use std::{collections::HashMap, path::PathBuf, time::Instant};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use egui::{ColorImage, TextureHandle, Vec2};
@@ -16,6 +16,7 @@ pub struct App {
     // pub(super) color_convert_from_to: Vec<String>,
     pub(super) color_convert_from_to: Vec<Option<usize>>,
     pub(super) color_convert_in_place: bool,
+    pub(super) color_convert_models: HashMap<u32, bool>,
 
     pub(super) input_files_splitting: Vec<PathBuf>,
     pub(super) input_files_conversion: Vec<PathBuf>,

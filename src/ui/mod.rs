@@ -180,6 +180,12 @@ impl App {
 
             self.color_convert_from_to.truncate(info.colors.len());
 
+            // self.color_convert_models = vec![false; info.objects.len()];
+            self.color_convert_models.clear();
+            for object in info.objects.iter() {
+                self.color_convert_models.insert(object.id, false);
+            }
+
             self.color_convert_file_info = Some((path.clone(), info));
         }
 
@@ -245,29 +251,16 @@ impl App {
                 });
             }
 
-            #[cfg(feature = "nope")]
-            for (i, color_from) in self.color_convert_from_to.iter_mut().enumerate() {
+            ui.separator();
+
+            for (i, object) in info.1.objects.iter().enumerate() {
                 ui.horizontal(|ui| {
-                    ui.label(format!("{: >2}: ", i + 1));
-
-                    let c = self.color_convert_file_info.as_ref().unwrap().1.colors[i];
-
-                    ui.label(utilities::colored_box(c, None));
-
-                    egui::ComboBox::from_id_salt(i + 12345)
-                        .width(300.)
-                        .selected_text(match color_from {
-                            Some(id) => utilities::colored_box(c, Some(&format!("{}", id))),
-                            None => egui::text::LayoutJob::default(),
-                        })
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(color_from, None, "None");
-
-                            for (i, c) in info.1.colors.iter().enumerate() {
-                                let text = utilities::colored_box(*c, Some(&format!("{}", i + 1)));
-                                ui.selectable_value(color_from, Some(i), text);
-                            }
-                        });
+                    let x = self.color_convert_models.get_mut(&object.id).unwrap();
+                    ui.checkbox(
+                        // &mut self.color_convert_models[i],
+                        x,
+                        format!("Paint: {}", object.name),
+                    );
                 });
             }
         }
@@ -325,7 +318,11 @@ impl App {
                 debug!("Color {}: {:?}", i + 1, c);
             }
 
-            let Ok(model) = crate::paint_convert::convert_model_color(model, colors) else {
+            let Ok(model) = crate::paint_convert::convert_model_color(
+                model,
+                colors,
+                &self.color_convert_models,
+            ) else {
                 error!("Error converting model");
                 return;
             };
@@ -338,6 +335,8 @@ impl App {
 
             crate::save_load::save_orca_3mf(output_path, &model).unwrap();
         }
+
+        //
     }
 
     fn show_splitting(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {

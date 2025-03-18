@@ -209,6 +209,7 @@ pub fn save_orca_3mf<P: AsRef<Path>>(path: P, model: &OrcaModel) -> Result<()> {
     }
 
     for (cpath, sub_model) in model.sub_models().iter() {
+        debug!("saving sub model: {}", cpath);
         archive.start_file(cpath, options)?;
 
         let mut xml = String::new();
@@ -225,6 +226,22 @@ pub fn save_orca_3mf<P: AsRef<Path>>(path: P, model: &OrcaModel) -> Result<()> {
         xml_writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))?;
         xml_writer.write_indent()?;
         xml_writer.into_inner().write_all(xml.as_bytes())?;
+    }
+
+    for path in model.empty_models.iter() {
+        debug!("saving empty model: {}", path);
+        archive.start_file(path, options)?;
+
+        let mut xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p">
+ <metadata name="BambuStudio:3mfVersion">1</metadata>
+ <resources>
+ </resources>
+ <build/>
+</model>
+"#.to_string();
+
+        write!(&mut archive, "{}", xml)?;
     }
 
     Ok(())
@@ -511,6 +528,8 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
 
     let re_path = Regex::new(r"p:path")?;
 
+    let mut all_model_paths = std::collections::HashSet::new();
+
     for i in 0..zip.len() {
         let mut file = zip.by_index(i)?;
         if file.name().ends_with("3dmodel.model") {
@@ -534,6 +553,9 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
             // debug!("metadata: {:#?}", m);
 
             md_orca = Some(m);
+        } else if file.name().ends_with(".model") {
+            debug!("found model file: {}", file.name());
+            all_model_paths.insert(file.name().to_string());
         }
     }
 
@@ -573,6 +595,8 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
 
                     /// check for cached model, or load the component model from the path
                     let sub_model = sub_models_map.entry(cpath.to_string()).or_insert_with(|| {
+                        // debug!("loading sub model: {}", cpath);
+                        all_model_paths.remove(cpath);
                         let mut f = zip.by_name(&cpath).unwrap();
                         let mut s = String::new();
                         f.read_to_string(&mut s).unwrap();
@@ -688,6 +712,7 @@ pub fn load_3mf_orca_noconvert<P: AsRef<Path>>(path: P) -> Result<OrcaModel> {
         md,
         sub_models_map,
         sub_model_ids,
+        all_model_paths,
         sub_objects,
         painted,
         rels,

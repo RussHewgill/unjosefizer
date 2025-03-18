@@ -1,4 +1,7 @@
-use std::io::{BufReader, Read};
+use std::{
+    collections::{HashMap, HashSet},
+    io::{BufReader, Read},
+};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use tracing::{debug, error, info, trace, warn};
@@ -21,7 +24,7 @@ pub mod model_config {
     #[derive(Debug, Deserialize)]
     pub struct ModelObject {
         #[serde(rename = "@id")]
-        pub id: String,
+        pub id: u32,
 
         #[serde(rename = "metadata", default)]
         pub metadata: Vec<Metadata>,
@@ -101,7 +104,8 @@ pub struct PaintConvertInfo {
 
 #[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PaintConvertObject {
-    name: String,
+    pub name: String,
+    pub id: u32,
 }
 
 impl PaintConvertInfo {
@@ -150,6 +154,7 @@ impl PaintConvertInfo {
                 if let Some(name) = object.get_name() {
                     objects.push(PaintConvertObject {
                         name: name.to_string(),
+                        id: object.id,
                     });
                 }
             }
@@ -159,37 +164,53 @@ impl PaintConvertInfo {
     }
 }
 
+// #[cfg(feature = "nope")]
 pub fn convert_model_color(
     mut model: OrcaModel,
     conversions: Vec<Option<usize>>,
+    models: &HashMap<u32, bool>,
     // from_extruder: usize,
     // to_extruder: usize,
 ) -> Result<OrcaModel> {
+    // let mut comps: HashMap<u32, &Vec<crate::model::Component>> = HashMap::new();
     let mut comps = Vec::new();
 
+    // #[cfg(feature = "nope")]
     for object in model.model.resources.object.iter() {
-        // let Some(mesh) = object.object.get_mesh_mut() else {
-        //     warn!("Object {} does not have a mesh", object.id);
+        debug!("convert_model_color: Object {}", object.id);
+        // if models.get(&(object.id as u32)) != Some(&true) {
+        //     debug!("skipping");
         //     continue;
-        // };
-
+        // }
         let Some(model_comps) = object.object.get_components() else {
             warn!("Object {} does not have components", object.id);
             continue;
         };
 
         comps.extend_from_slice(&model_comps);
-
-        // convert_mesh_color(mesh, from_extruder, to_extruder)?;
     }
 
+    let mut processed_models = HashSet::new();
+
+    // #[cfg(feature = "nope")]
     for comp in comps.iter() {
+        let path = comp.path.as_ref().unwrap();
+
+        if processed_models.contains(&path) {
+            continue;
+        }
+
+        debug!(
+            "Converting color for component {}, path: {}",
+            comp.objectid, path,
+        );
         let sub_model = model
             .sub_models_mut()
-            .get_mut(&comp.path.as_ref().unwrap()[1..])
+            .get_mut(&path[1..])
             .context("From Sub-model not found in sub-models")?;
 
         for object in sub_model.model.resources.object.iter_mut() {
+            debug!("Converting color for sub-object {}", object.id);
             let mesh = object
                 .object
                 .get_mesh_mut()
@@ -199,7 +220,7 @@ pub fn convert_model_color(
             convert_mesh_color(mesh, conversions.clone())?;
         }
 
-        //
+        processed_models.insert(path);
     }
 
     Ok(model)
