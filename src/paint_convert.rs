@@ -12,6 +12,7 @@ use zip::ZipArchive;
 
 use crate::model_orca::OrcaModel;
 
+// #[cfg(feature = "nope")]
 pub mod model_config {
     use serde::Deserialize;
 
@@ -20,6 +21,16 @@ pub mod model_config {
         #[serde(rename = "object", default)]
         pub objects: Vec<ModelObject>,
     }
+
+    // impl ModelConfig {
+    //     pub fn read_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
+    //         let file = std::fs::File::open(path)?;
+    //         let reader = BufReader::new(file);
+    //         let mut de = quick_xml::de::Deserializer::from_reader(reader);
+    //         let config: ModelConfig = serde::Deserialize::deserialize(&mut de)?;
+    //         Ok(config)
+    //     }
+    // }
 
     #[derive(Debug, Deserialize)]
     pub struct ModelObject {
@@ -96,10 +107,12 @@ pub mod model_config {
     }
 }
 
-#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
 pub struct PaintConvertInfo {
     pub colors: Vec<(u8, u8, u8)>,
     pub objects: Vec<PaintConvertObject>,
+    #[serde(skip)]
+    pub model_settings: edit_xml::Document,
 }
 
 #[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
@@ -139,18 +152,20 @@ impl PaintConvertInfo {
 
         let mut objects = Vec::new();
 
-        {
+        let model_settings = {
             let model_path = "Metadata/model_settings.config";
             let mut model_file = zip.by_name(model_path)?;
 
             let mut s = String::new();
             model_file.read_to_string(&mut s)?;
 
+            let model_settings = edit_xml::Document::parse_str(&s).unwrap();
+
             let mut de = quick_xml::de::Deserializer::from_str(&s);
             let config: model_config::ModelConfig = serde::Deserialize::deserialize(&mut de)?;
 
             // Extract object names
-            for object in config.objects {
+            for object in config.objects.iter() {
                 if let Some(name) = object.get_name() {
                     objects.push(PaintConvertObject {
                         name: name.to_string(),
@@ -158,9 +173,15 @@ impl PaintConvertInfo {
                     });
                 }
             }
-        }
 
-        Ok(Self { colors, objects })
+            model_settings
+        };
+
+        Ok(Self {
+            colors,
+            objects,
+            model_settings,
+        })
     }
 }
 
@@ -169,6 +190,7 @@ pub fn convert_model_color(
     mut model: OrcaModel,
     conversions: Vec<Option<usize>>,
     models: &HashMap<u32, bool>,
+    // paint_info: &PaintConvertInfo,
     // from_extruder: usize,
     // to_extruder: usize,
 ) -> Result<OrcaModel> {
@@ -221,6 +243,28 @@ pub fn convert_model_color(
         }
 
         processed_models.insert(path);
+    }
+
+    for object in model.md.object.iter_mut() {
+        for md in object.metadata.iter_mut() {
+            if md.key.as_deref() == Some("extruder") {
+                let Some(v) = &md.value else {
+                    continue;
+                };
+                let Some(extruder) = v.parse::<usize>().ok() else {
+                    continue;
+                };
+
+                if let Some(to_extruder) = conversions[extruder] {
+                    debug!("Converting color for object {}", object.id);
+                    // Convert the color for this object
+                    // convert_mesh_color(object, conversions.clone())?;
+                    md.value = Some(to_extruder.to_string());
+                } else {
+                    debug!("No conversion for extruder {}", extruder);
+                }
+            }
+        }
     }
 
     Ok(model)

@@ -158,7 +158,24 @@ impl App {
                 let mut picker = rfd::FileDialog::new().add_filter("filter", &["3mf"]);
                 if let Some(path) = picker.pick_file() {
                     self.current_input_files_mut().clear();
-                    self.current_input_files_mut().push(path);
+                    self.current_input_files_mut().push(path.clone());
+
+                    debug!("Processing file: {:?}", self.current_input_files()[0]);
+                    let info = PaintConvertInfo::load_from_file(&path).unwrap();
+
+                    for _ in info.colors.iter() {
+                        self.color_convert_from_to.push(None);
+                    }
+
+                    self.color_convert_from_to.truncate(info.colors.len());
+
+                    // self.color_convert_models = vec![false; info.objects.len()];
+                    self.color_convert_models.clear();
+                    for object in info.objects.iter() {
+                        self.color_convert_models.insert(object.id, false);
+                    }
+
+                    self.color_convert_file_info = Some((path.clone(), info));
                 }
             }
 
@@ -167,6 +184,7 @@ impl App {
             }
         });
 
+        // #[cfg(feature = "nope")]
         if ui.button("Process file").clicked() {
             debug!("Processing file: {:?}", self.current_input_files()[0]);
             let path = self.current_input_files()[0].clone();
@@ -188,6 +206,14 @@ impl App {
 
             self.color_convert_file_info = Some((path.clone(), info));
         }
+
+        if ui.button("Reset").clicked() {
+            for c in self.color_convert_from_to.iter_mut() {
+                *c = None;
+            }
+        }
+
+        ui.checkbox(&mut self.color_convert_in_place, "Modify in-place");
 
         ui.separator();
 
@@ -264,14 +290,6 @@ impl App {
                 });
             }
         }
-
-        if ui.button("Reset").clicked() {
-            for c in self.color_convert_from_to.iter_mut() {
-                *c = None;
-            }
-        }
-
-        ui.checkbox(&mut self.color_convert_in_place, "Modify in-place");
 
         let Some(path) = self.current_input_files().get(0) else {
             return;

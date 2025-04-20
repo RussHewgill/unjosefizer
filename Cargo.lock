@@ -1085,6 +1085,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "edit-xml"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f955ed8607e62368a0ff8c4235d8a9b5ebb8d7dbf0139a457cf324ce5ed5d6a"
+dependencies = [
+ "ahash",
+ "encoding_rs",
+ "memchr",
+ "quick-xml 0.36.2",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "eframe"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1240,6 +1254,15 @@ checksum = "9e4cadcff7a5353ba72b7fea76bf2122b5ebdbc68e8155aa56dfdea90083fe1b"
 dependencies = [
  "bytemuck",
  "serde",
+]
+
+[[package]]
+name = "encoding_rs"
+version = "0.8.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75030f3c4f45dafd7586dd6780965a8c7e8e285a5ecb86713e63a79c5b2766f3"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
@@ -3132,6 +3155,15 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
+version = "0.36.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7649a7b4df05aed9ea7ec6f628c67c9953a43869b8bc50929569b2999d443fe"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "quick-xml"
 version = "0.37.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "165859e9e55f79d67b96c5d96f4e88b6f2695a1972849c15a6a3f5c59fc2c003"
@@ -4184,6 +4216,7 @@ dependencies = [
  "anyhow",
  "bitvec",
  "crossbeam-channel",
+ "edit-xml",
  "eframe",
  "egui",
  "egui_extras",

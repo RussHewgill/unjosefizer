@@ -10,3 +10,4 @@ assets/*
 debug_output*
 preview*.png
 *.model
+*.config
