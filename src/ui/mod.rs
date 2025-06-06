@@ -279,6 +279,7 @@ impl App {
 
             ui.separator();
 
+            #[cfg(feature = "nope")]
             for (i, object) in info.1.objects.iter().enumerate() {
                 ui.horizontal(|ui| {
                     let x = self.color_convert_models.get_mut(&object.id).unwrap();

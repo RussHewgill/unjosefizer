@@ -38,18 +38,26 @@ pub mod model_config {
         pub id: u32,
 
         #[serde(rename = "metadata", default)]
+        // #[serde(deserialize_with = "de_metadata")]
         pub metadata: Vec<Metadata>,
 
         #[serde(rename = "part", default)]
         pub parts: Vec<Part>,
     }
 
+    // fn de_metadata<'de, D>(d: D) -> Result<Vec<Metadata>, D::Error>
+    // where
+    //     D: serde::Deserializer<'de>,
+    // {
+    //     unimplemented!()
+    // }
+
     #[derive(Debug, Deserialize)]
     pub struct Metadata {
-        #[serde(rename = "@key")]
+        #[serde(rename = "@key", default)]
         pub key: String,
 
-        #[serde(rename = "@value")]
+        #[serde(rename = "@value", default)]
         pub value: String,
     }
 
@@ -149,6 +157,8 @@ impl PaintConvertInfo {
                 Ok((r, g, b))
             })
             .collect::<Result<Vec<(u8, u8, u8)>>>()?;
+
+        debug!("Loaded colors: {:?}", colors);
 
         let mut objects = Vec::new();
 
